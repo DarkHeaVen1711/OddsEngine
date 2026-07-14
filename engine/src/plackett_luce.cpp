@@ -150,4 +150,37 @@ void PlackettLuceModel::fit(
     }
 }
 
+std::map<std::string, double> PlackettLuceModel::predict_win_probabilities(
+    const std::vector<RaceParticipant>& entrants
+) const {
+    std::map<std::string, double> probs;
+    double sum = 0.0;
+
+    for (const auto& part : entrants) {
+        double dnf_rate = 0.05;
+        auto it_dnf = constructor_dnf_rates.find(part.constructor_id);
+        if (it_dnf != constructor_dnf_rates.end()) dnf_rate = it_dnf->second;
+
+        double theta_d = 1.0;
+        auto it_d = driver_skills.find(part.driver_id);
+        if (it_d != driver_skills.end()) theta_d = it_d->second;
+
+        double theta_c = 1.0;
+        auto it_c = constructor_skills.find(part.constructor_id);
+        if (it_c != constructor_skills.end()) theta_c = it_c->second;
+
+        double strength = (1.0 - dnf_rate) * theta_d * theta_c * std::exp(-grid_penalty * part.grid_position);
+        probs[part.entity_id] = strength;
+        sum += strength;
+    }
+
+    if (sum > 0.0) {
+        for (auto& pair : probs) {
+            pair.second /= sum;
+        }
+    }
+
+    return probs;
+}
+
 } // namespace oddsengine
