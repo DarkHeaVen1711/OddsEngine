@@ -138,4 +138,61 @@ void PoissonModel::fit(
     }
 }
 
+std::vector<std::vector<double>> PoissonModel::get_score_matrix(
+    const std::string& home_id,
+    const std::string& away_id,
+    double& out_win,
+    double& out_draw,
+    double& out_loss
+) const {
+    double att_h = 1.0;
+    auto it_ah = attack.find(home_id);
+    if (it_ah != attack.end()) att_h = it_ah->second;
+
+    double def_a = 1.0;
+    auto it_da = defense.find(away_id);
+    if (it_da != defense.end()) def_a = it_da->second;
+
+    double att_a = 1.0;
+    auto it_aa = attack.find(away_id);
+    if (it_aa != attack.end()) att_a = it_aa->second;
+
+    double def_h = 1.0;
+    auto it_dh = defense.find(home_id);
+    if (it_dh != defense.end()) def_h = it_dh->second;
+
+    double lam_h = std::max(0.01, att_h * def_a * home_advantage);
+    double lam_a = std::max(0.01, att_a * def_h);
+
+    double lam1 = std::max(0.001, lam_h - covariance);
+    double lam2 = std::max(0.001, lam_a - covariance);
+
+    std::vector<std::vector<double>> matrix(11, std::vector<double>(11, 0.0));
+    double sum = 0.0;
+    out_win = 0.0;
+    out_draw = 0.0;
+    out_loss = 0.0;
+
+    for (int i = 0; i <= 10; ++i) {
+        for (int j = 0; j <= 10; ++j) {
+            matrix[i][j] = biv_poisson_prob(i, j, lam1, lam2, covariance);
+            sum += matrix[i][j];
+        }
+    }
+
+    // Normalize probabilities to sum to 1.0
+    if (sum > 0.0) {
+        for (int i = 0; i <= 10; ++i) {
+            for (int j = 0; j <= 10; ++j) {
+                matrix[i][j] /= sum;
+                if (i > j) out_win += matrix[i][j];
+                else if (i == j) out_draw += matrix[i][j];
+                else out_loss += matrix[i][j];
+            }
+        }
+    }
+
+    return matrix;
+}
+
 } // namespace oddsengine
