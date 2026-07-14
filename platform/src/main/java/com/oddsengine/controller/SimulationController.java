@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.Map;
 
 @RestController
+@CrossOrigin(origins = "*")
 @RequestMapping("/api/simulations")
 public class SimulationController {
     private final SimulationService simulationService;
