@@ -119,4 +119,24 @@ void BayesianModel::update(double outcome) {
     }
 }
 
+BayesianResult BayesianModel::get_result(double ci_level) const {
+    // Posterior mean from Dirichlet: alpha_w / (alpha_w + alpha_d + alpha_l)
+    double total = alpha_w + alpha_d + alpha_l;
+    if (total < 1e-12) {
+        return {1.0 / 3.0, 0.0, 1.0, ci_level};
+    }
+    double mean = alpha_w / total;
+
+    // Credible interval via the Beta marginal for win probability.
+    // The marginal of a Dirichlet for one component is Beta(alpha_w, total - alpha_w).
+    double a = alpha_w;
+    double b = total - alpha_w;
+
+    double tail = (1.0 - ci_level) / 2.0;
+    double lower = ibeta_inv(a, b, tail);
+    double upper = ibeta_inv(a, b, 1.0 - tail);
+
+    return {mean, lower, upper, ci_level};
+}
+
 } // namespace oddsengine
