@@ -1,9 +1,9 @@
 #include "monte_carlo.hpp"
 #include <algorithm>
 #include <numeric>
-#include <thread>
-#include <mutex>
 #include <vector>
+#include <map>
+#include <cstdint>
 
 namespace oddsengine {
 
@@ -100,41 +100,19 @@ MonteCarloResult run_monte_carlo(
     int n_entities = static_cast<int>(current_standings.size());
     if (n_entities == 0 || n_simulations <= 0) return {};
 
-    unsigned int n_threads = std::max(1u, std::thread::hardware_concurrency());
-    // rank_counts[entity_idx][rank-1] = count of simulations where entity finished that rank
+    // rank_counts[entity_idx][rank-1] = number of simulations finishing that rank
     std::vector<std::vector<int>> rank_counts(n_entities, std::vector<int>(n_entities, 0));
-    std::mutex mtx;
 
-    auto worker = [&](int thread_id, int sim_start, int sim_end) {
-        XorShift64 rng(seed + static_cast<uint64_t>(thread_id) * 6364136223846793005ULL);
-        // Local accumulator — no mutex inside hot loop
-        std::vector<std::vector<int>> local_counts(n_entities, std::vector<int>(n_entities, 0));
+    // Single RNG seeded from base seed — reproducible for a given seed value.
+    // ponytail: portable sequential loop avoids MinGW std::thread limitations.
+    XorShift64 rng(seed ? seed : 1);
 
-        for (int s = sim_start; s < sim_end; ++s) {
-            auto ranks = simulate_season(current_standings, fixtures, rng);
-            for (int i = 0; i < n_entities; ++i) {
-                local_counts[i][ranks[i] - 1]++;
-            }
-        }
-
-        // Merge into global counts under lock (done once per thread, not per sim)
-        std::lock_guard<std::mutex> lock(mtx);
+    for (int s = 0; s < n_simulations; ++s) {
+        auto ranks = simulate_season(current_standings, fixtures, rng);
         for (int i = 0; i < n_entities; ++i) {
-            for (int r = 0; r < n_entities; ++r) {
-                rank_counts[i][r] += local_counts[i][r];
-            }
+            rank_counts[i][ranks[i] - 1]++;
         }
-    };
-
-    // Distribute simulations across threads
-    std::vector<std::thread> threads;
-    int batch = n_simulations / static_cast<int>(n_threads);
-    for (unsigned int t = 0; t < n_threads; ++t) {
-        int s_start = static_cast<int>(t) * batch;
-        int s_end   = (t + 1 == n_threads) ? n_simulations : s_start + batch;
-        threads.emplace_back(worker, static_cast<int>(t), s_start, s_end);
     }
-    for (auto& th : threads) th.join();
 
     // Build result — convert counts to probabilities
     MonteCarloResult result;
