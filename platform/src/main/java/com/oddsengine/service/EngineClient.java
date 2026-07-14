@@ -143,6 +143,49 @@ public class EngineClient {
         }
     }
 
+    public String runMonteCarlo(List<Map<String, Object>> standings, List<Map<String, Object>> fixtures, int nSimulations) {
+        try {
+            String enginePath = findEngineExecutable();
+            if (enginePath == null) {
+                throw new RuntimeException("Could not locate engine.exe in the project directory.");
+            }
+
+            Map<String, Object> inputMap = new HashMap<>();
+            inputMap.put("model_name", "monte_carlo");
+            inputMap.put("n_simulations", nSimulations);
+            inputMap.put("seed", 42);
+            inputMap.put("standings", standings);
+            inputMap.put("fixtures", fixtures);
+            
+            String inputJson = objectMapper.writeValueAsString(inputMap);
+
+            ProcessBuilder pb = new ProcessBuilder(enginePath, "--cli");
+            Process process = pb.start();
+
+            try (OutputStream os = process.getOutputStream()) {
+                os.write(inputJson.getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+
+            String outputJson;
+            try (InputStream is = process.getInputStream()) {
+                outputJson = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new RuntimeException("Engine subprocess exited with code " + exitCode);
+            }
+
+            JsonNode root = objectMapper.readTree(outputJson);
+            return objectMapper.writeValueAsString(root.path("rank_distributions"));
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error executing Monte Carlo season simulation: " + e.getMessage(), e);
+        }
+    }
+
+
 
     private String findEngineExecutable() {
         String[] paths = {
