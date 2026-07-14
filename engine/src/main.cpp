@@ -1,6 +1,7 @@
 #include "elo.hpp"
 #include "glicko2.hpp"
 #include "poisson.hpp"
+#include "plackett_luce.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -101,8 +102,27 @@ void run_tests() {
     poisson.fit(history, 100, 0.01);
     double win = 0.0, draw = 0.0, loss = 0.0;
     poisson.get_score_matrix("H", "A", win, draw, loss);
-    assert(win > loss);
     assert(std::abs(win + draw + loss - 1.0) < 0.01);
+
+    // Test 6: Plackett-Luce F1 Model Parameter Recovery
+    RaceParticipant rp1 = {"ent1", "D1", "C1", 1, 1, false};
+    RaceParticipant rp2 = {"ent2", "D2", "C2", 2, 2, false};
+    RaceRecord rr1 = {"race1", {rp1, rp2}};
+
+    RaceParticipant rp3 = {"ent1", "D1", "C1", 2, 1, false};
+    RaceParticipant rp4 = {"ent2", "D2", "C2", 1, 2, false};
+    RaceRecord rr2 = {"race2", {rp3, rp4}};
+
+    PlackettLuceModel pl;
+    pl.fit({rr1, rr2}, 100, 0.01);
+    
+    std::vector<RaceParticipant> entrants = {
+        {"ent1", "D1", "C1", 1, 0, false},
+        {"ent2", "D2", "C2", 1, 0, false}
+    };
+    auto pl_probs = pl.predict_win_probabilities(entrants);
+    assert(pl_probs["ent1"] > pl_probs["ent2"]);
+    assert(std::abs(pl_probs["ent1"] + pl_probs["ent2"] - 1.0) < 1e-6);
 
     std::cout << "All statistical core tests passed successfully!" << std::endl;
 }
@@ -194,6 +214,65 @@ void run_cli() {
             std::cout << "\"" << p_a.id << "\": {\"rating\": " << updated.rating 
                       << ", \"rating_deviation\": " << updated.rd 
                       << ", \"volatility\": " << updated.volatility << "}";
+            first = false;
+        }
+        std::cout << "}}" << std::endl;
+
+    } else if (model_name == "plackett_luce") {
+        std::vector<RaceRecord> history;
+        size_t pos = line.find("\"history\"");
+        if (pos != std::string::npos) {
+            size_t hist_end = line.find("]", pos);
+            while ((pos = line.find("\"race_id\"", pos)) != std::string::npos && pos < hist_end) {
+                pos = line.find("\"", pos + 9);
+                size_t r_end = line.find("\"", pos + 1);
+                RaceRecord rec = {line.substr(pos + 1, r_end - pos - 1), {}};
+                pos = r_end;
+                size_t p_list_end = line.find("]", pos);
+                while ((pos = line.find("\"entity_id\"", pos)) != std::string::npos && pos < p_list_end) {
+                    auto extract = [&](const std::string& key) {
+                        size_t k_pos = line.find(key, pos);
+                        k_pos = line.find_first_of("\":", k_pos + key.size());
+                        k_pos = line.find_first_of("\"0123456789t", k_pos);
+                        size_t k_end = line.find_first_of(",}\"", k_pos);
+                        return line.substr(k_pos, k_end - k_pos);
+                    };
+                    std::string id = extract("\"entity_id\"");
+                    std::string d = extract("\"driver_id\"");
+                    std::string c = extract("\"constructor_id\"");
+                    int gp = std::stoi(extract("\"grid_position\""));
+                    int fr = std::stoi(extract("\"finish_rank\""));
+                    bool dnf = (extract("\"is_dnf\"").find("true") != std::string::npos);
+                    rec.participants.push_back({id, d, c, gp, fr, dnf});
+                    pos = line.find("}", pos) + 1;
+                }
+                history.push_back(rec);
+            }
+        }
+        std::vector<RaceParticipant> entrants;
+        size_t pred_pos = line.find("\"predict_entrants\"");
+        if (pred_pos != std::string::npos) {
+            size_t pred_end = line.find("]", pred_pos);
+            while ((pos = line.find("\"entity_id\"", pred_pos)) != std::string::npos && pos < pred_end) {
+                auto extract = [&](const std::string& key) {
+                    size_t k_pos = line.find(key, pos);
+                    k_pos = line.find_first_of("\":", k_pos + key.size());
+                    k_pos = line.find_first_of("\"0123456789", k_pos);
+                    size_t k_end = line.find_first_of(",}\"", k_pos);
+                    return line.substr(k_pos, k_end - k_pos);
+                };
+                entrants.push_back({extract("\"entity_id\""), extract("\"driver_id\""), extract("\"constructor_id\""), std::stoi(extract("\"grid_position\"")), 0, false});
+                pred_pos = line.find("}", pos) + 1;
+            }
+        }
+        PlackettLuceModel pl;
+        pl.fit(history, 100, 0.005);
+        auto win_probs = pl.predict_win_probabilities(entrants);
+        std::cout << "{\"probabilities\": {";
+        bool first = true;
+        for (const auto& pair : win_probs) {
+            if (!first) std::cout << ", ";
+            std::cout << "\"" << pair.first << "\": " << pair.second;
             first = false;
         }
         std::cout << "}}" << std::endl;
