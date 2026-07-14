@@ -12,6 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -21,6 +24,12 @@ public class RatingOrchestratorTest {
 
     @Autowired
     private RatingOrchestrator orchestrator;
+
+    @Autowired
+    private IngestionService ingestionService;
+
+    @Autowired
+    private CsvSportDataAdapter csvAdapter;
 
     @Autowired
     private SportEventRepository eventRepository;
@@ -142,5 +151,33 @@ public class RatingOrchestratorTest {
         assertTrue(snapshotA.getRatingDeviation() < 350.0);
         assertTrue(snapshotB.getRatingDeviation() < 350.0);
         assertEquals("glicko2", snapshotA.getModelName());
+    }
+
+    @Test
+    public void testMatchIngestionPipeline() throws IOException {
+        // Create temporary CSV match file
+        File tempCsv = File.createTempFile("test_matches", ".csv");
+        tempCsv.deleteOnExit();
+
+        try (FileWriter fw = new FileWriter(tempCsv)) {
+            fw.write("id,sport_id,timestamp,venue,home_team,away_team,home_goals,away_goals,status\n");
+            fw.write("csv_event_1,football,1710000000,Arsenal Stadium,Arsenal,Chelsea,2,1,completed\n");
+        }
+
+        csvAdapter.setCsvFilePath(tempCsv.getAbsolutePath());
+
+        // Perform ingestion
+        int count = ingestionService.ingestMatches("football", 1700000000L, "elo");
+        assertEquals(1, count);
+
+        // Verify database state
+        assertTrue(eventRepository.existsById("csv_event_1"));
+
+        // Verify ratings populated dynamically downstream
+        List<RatingSnapshot> snapshots = ratingRepository.findAll();
+        boolean hasArsenal = snapshots.stream().anyMatch(s -> s.getEntityId().equals("arsenal") && "elo".equals(s.getModelName()));
+        boolean hasChelsea = snapshots.stream().anyMatch(s -> s.getEntityId().equals("chelsea") && "elo".equals(s.getModelName()));
+        assertTrue(hasArsenal);
+        assertTrue(hasChelsea);
     }
 }
