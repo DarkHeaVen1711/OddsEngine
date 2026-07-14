@@ -69,4 +69,40 @@ EvalResult evaluate(const std::vector<PredictionRecord>& predictions, int n_bins
     return res;
 }
 
+
+BacktestResult rolling_backtest(
+    const std::vector<MatchRecord>& ordered_history,
+    int min_training_matches
+) {
+    BacktestResult res = {0.0, 0.0, 0};
+    int n = ordered_history.size();
+    if (n <= min_training_matches) return res;
+
+    std::vector<PredictionRecord> preds;
+
+    for (int i = min_training_matches; i < n; ++i) {
+        std::vector<MatchRecord> training_history(ordered_history.begin(), ordered_history.begin() + i);
+
+        PoissonModel model;
+        model.fit(training_history, 100, 0.01);
+
+        const auto& target = ordered_history[i];
+        double win = 0.0, draw = 0.0, loss = 0.0;
+        model.get_score_matrix(target.home_id, target.away_id, win, draw, loss);
+
+        int actual = 0;
+        if (target.home_goals > target.away_goals) actual = 1;
+        else if (target.home_goals < target.away_goals) actual = -1;
+
+        preds.push_back({win, draw, loss, actual});
+    }
+
+    auto eval = evaluate(preds);
+    res.brier_score = eval.brier_score;
+    res.log_loss = eval.log_loss;
+    res.n_predictions = preds.size();
+
+    return res;
+}
+
 } // namespace oddsengine
