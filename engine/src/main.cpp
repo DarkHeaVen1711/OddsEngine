@@ -5,6 +5,7 @@
 #include "bayesian.hpp"
 #include "monte_carlo.hpp"
 #include "eval.hpp"
+#include "cricket.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -574,6 +575,48 @@ void run_cli() {
         std::cout << "{\"probabilities\": {\"win\": " << win 
                   << ", \"draw\": " << draw 
                   << ", \"loss\": " << loss << "}}" << std::endl;
+
+    } else if (model_name == "cricket_t20" || model_name == "cricket_odi" || model_name == "cricket_test") {
+        // Cricket format-aware logistic win probability model (§1.3c)
+        // Input JSON: {"model_name":"cricket_t20|odi|test",
+        //              "home_id":"india","away_id":"australia",
+        //              "toss_winner_id":"india",              <- optional
+        //              "home_rating":1550.0,"away_rating":1520.0}
+        auto parse_str = [&](const std::string& key) -> std::string {
+            size_t kp = line.find(key);
+            if (kp == std::string::npos) return "";
+            kp = line.find("\"", kp + key.size());
+            size_t ke = line.find("\"", kp + 1);
+            return line.substr(kp + 1, ke - kp - 1);
+        };
+        auto parse_dbl_key = [&](const std::string& key) -> double {
+            size_t kp = line.find(key);
+            if (kp == std::string::npos) return 1500.0;
+            kp = line.find(":", kp);
+            size_t ke = line.find_first_of(",}", kp);
+            return std::stod(line.substr(kp + 1, ke - kp - 1));
+        };
+
+        std::string home_id   = parse_str("\"home_id\"");
+        std::string away_id   = parse_str("\"away_id\"");
+        std::string toss_winner = parse_str("\"toss_winner_id\"");
+        double home_rating    = parse_dbl_key("\"home_rating\"");
+        double away_rating    = parse_dbl_key("\"away_rating\"");
+
+        std::map<std::string, double> cricket_ratings = {
+            { home_id, home_rating },
+            { away_id, away_rating }
+        };
+
+        auto pred = predict_cricket_match(model_name, home_id, away_id, cricket_ratings, toss_winner);
+
+        std::cout << "{\"probabilities\": {\"win\": " << pred.p_home_win
+                  << ", \"draw\": " << pred.p_draw
+                  << ", \"loss\": " << pred.p_away_win << "}"
+                  << ", \"model_inputs\": {\"rating_diff\": " << pred.rating_diff
+                  << ", \"toss_logit\": " << pred.toss_logit
+                  << ", \"home_logit\": " << pred.home_logit
+                  << ", \"format\": \"" << pred.format << "\"}}" << std::endl;
 
     } else {
         Event event;
