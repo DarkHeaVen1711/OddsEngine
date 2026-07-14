@@ -86,4 +86,68 @@ static std::vector<int> simulate_season(
     return ranks;
 }
 
+// ---------------------------------------------------------------------------
+// Parallel Monte Carlo runner — splits simulations across hardware threads.
+// Each thread gets its own RNG seed = (base_seed + thread_id) to avoid
+// contention and guarantee reproducibility for a given seed.
+// ---------------------------------------------------------------------------
+MonteCarloResult run_monte_carlo(
+    const std::vector<StandingRow>& current_standings,
+    const std::vector<SimFixture>& fixtures,
+    int n_simulations,
+    uint64_t seed
+) {
+    int n_entities = static_cast<int>(current_standings.size());
+    if (n_entities == 0 || n_simulations <= 0) return {};
+
+    unsigned int n_threads = std::max(1u, std::thread::hardware_concurrency());
+    // rank_counts[entity_idx][rank-1] = count of simulations where entity finished that rank
+    std::vector<std::vector<int>> rank_counts(n_entities, std::vector<int>(n_entities, 0));
+    std::mutex mtx;
+
+    auto worker = [&](int thread_id, int sim_start, int sim_end) {
+        XorShift64 rng(seed + static_cast<uint64_t>(thread_id) * 6364136223846793005ULL);
+        // Local accumulator — no mutex inside hot loop
+        std::vector<std::vector<int>> local_counts(n_entities, std::vector<int>(n_entities, 0));
+
+        for (int s = sim_start; s < sim_end; ++s) {
+            auto ranks = simulate_season(current_standings, fixtures, rng);
+            for (int i = 0; i < n_entities; ++i) {
+                local_counts[i][ranks[i] - 1]++;
+            }
+        }
+
+        // Merge into global counts under lock (done once per thread, not per sim)
+        std::lock_guard<std::mutex> lock(mtx);
+        for (int i = 0; i < n_entities; ++i) {
+            for (int r = 0; r < n_entities; ++r) {
+                rank_counts[i][r] += local_counts[i][r];
+            }
+        }
+    };
+
+    // Distribute simulations across threads
+    std::vector<std::thread> threads;
+    int batch = n_simulations / static_cast<int>(n_threads);
+    for (unsigned int t = 0; t < n_threads; ++t) {
+        int s_start = static_cast<int>(t) * batch;
+        int s_end   = (t + 1 == n_threads) ? n_simulations : s_start + batch;
+        threads.emplace_back(worker, static_cast<int>(t), s_start, s_end);
+    }
+    for (auto& th : threads) th.join();
+
+    // Build result — convert counts to probabilities
+    MonteCarloResult result;
+    for (int i = 0; i < n_entities; ++i) {
+        EntityRankDist erd;
+        erd.entity_id = current_standings[i].entity_id;
+        erd.rank_probs.resize(n_entities);
+        for (int r = 0; r < n_entities; ++r) {
+            erd.rank_probs[r] = static_cast<double>(rank_counts[i][r]) / n_simulations;
+        }
+        result.distributions.push_back(erd);
+    }
+    return result;
+}
+
 } // namespace oddsengine
