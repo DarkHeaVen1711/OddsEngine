@@ -63,10 +63,10 @@ def main():
                     probs = res.get("probabilities", {})
                     actual = 1 if t1["goals"] == t2["goals"] else (0 if t1["goals"] > t2["goals"] else 2)
                     predictions.append({
-                        "win": probs.get("win", 0.33),
-                        "draw": probs.get("draw", 0.33),
-                        "loss": probs.get("loss", 0.34),
-                        "actual": actual
+                        "predicted_win": probs.get("win", 0.33),
+                        "predicted_draw": probs.get("draw", 0.33),
+                        "predicted_loss": probs.get("loss", 0.34),
+                        "actual_outcome": actual
                     })
             except Exception:
                 pass
