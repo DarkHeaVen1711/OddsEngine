@@ -68,4 +68,74 @@ double compute_nll(
     return nll;
 }
 
+void PoissonModel::fit(
+    const std::vector<MatchRecord>& history,
+    int max_iterations,
+    double learning_rate
+) {
+    std::set<std::string> team_set;
+    for (const auto& match : history) {
+        team_set.insert(match.home_id);
+        team_set.insert(match.away_id);
+    }
+    std::vector<std::string> teams(team_set.begin(), team_set.end());
+    int m = teams.size();
+    if (m == 0) return;
+
+    // Vector mapping: [att_0..att_m-1, def_0..def_m-1, home_advantage, covariance]
+    std::vector<double> p(2 * m + 2);
+    for (int i = 0; i < m; ++i) {
+        p[i] = 1.0;       // attack
+        p[m + i] = 1.0;   // defense
+    }
+    p[2 * m] = 1.2;       // home advantage
+    p[2 * m + 1] = 0.05;  // covariance
+
+    double h = 1e-5;
+    for (int iter = 0; iter < max_iterations; ++iter) {
+        std::vector<double> grad(2 * m + 2, 0.0);
+        for (size_t j = 0; j < p.size(); ++j) {
+            double old_val = p[j];
+            p[j] = old_val + h;
+            double nll_plus = compute_nll(history, teams, p);
+            p[j] = old_val - h;
+            double nll_minus = compute_nll(history, teams, p);
+            p[j] = old_val;
+
+            grad[j] = (nll_plus - nll_minus) / (2.0 * h);
+        }
+
+        // Gradient update and boundary constraints clamping
+        for (size_t j = 0; j < p.size(); ++j) {
+            p[j] -= learning_rate * grad[j];
+            if (j < 2 * m + 1) {
+                p[j] = std::max(0.05, p[j]); // positive coefficients
+            } else {
+                p[j] = std::max(0.0, std::min(0.15, p[j])); // covariance bounds
+            }
+        }
+    }
+
+    // Extract optimized parameters back to class
+    attack.clear();
+    defense.clear();
+    double avg_attack = 0.0;
+    for (int i = 0; i < m; ++i) {
+        attack[teams[i]] = p[i];
+        defense[teams[i]] = p[m + i];
+        avg_attack += p[i];
+    }
+    home_advantage = p[2 * m];
+    covariance = p[2 * m + 1];
+
+    // Identifiability constraint: average attack = 1.0
+    if (m > 0) {
+        avg_attack /= m;
+        for (int i = 0; i < m; ++i) {
+            attack[teams[i]] /= avg_attack;
+            defense[teams[i]] *= avg_attack;
+        }
+    }
+}
+
 } // namespace oddsengine
