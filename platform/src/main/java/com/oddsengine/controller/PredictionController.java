@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@CrossOrigin(origins = "*")
 @RequestMapping("/api")
 public class PredictionController {
     private final RatingOrchestrator ratingOrchestrator;
@@ -51,5 +52,11 @@ public class PredictionController {
     @GetMapping("/predictions/upcoming")
     public List<SportEvent> getUpcomingMatches() {
         return eventRepository.findByStatus("scheduled");
+    }
+
+    @GetMapping("/entities/leaderboard")
+    public List<RatingSnapshot> getLeaderboard(@RequestParam(defaultValue = "football") String sportId,
+                                               @RequestParam(defaultValue = "elo") String modelName) {
+        return ratingRepository.getLeaderboard(sportId, modelName);
     }
 }
