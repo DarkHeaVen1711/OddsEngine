@@ -120,3 +120,104 @@ class RatingServiceImpl(services_pb2_grpc.RatingServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             raise
+
+class PredictionServiceImpl(services_pb2_grpc.PredictionServiceServicer):
+    def PredictEvent(self, request, context):
+        start_time = time.time()
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT e.id, e.venue, e.timestamp, p.entity_id, p.result_data_json, p.finish_rank
+                FROM events e
+                JOIN participants p ON e.id = p.event_id
+                WHERE e.sport_id = ? AND e.status = 'completed'
+            """, (request.sport_id,))
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            events_map = {}
+            for row in rows:
+                ev_id, venue, ts, ent_id, res_json, rank = row
+                if ev_id not in events_map:
+                    events_map[ev_id] = {"venue": venue, "timestamp": ts, "parts": []}
+                
+                goals = 0
+                try:
+                    if res_json:
+                        goals = json.loads(res_json).get("goals", 0)
+                except Exception:
+                    pass
+                    
+                events_map[ev_id]["parts"].append({
+                    "entity_id": ent_id,
+                    "goals": goals,
+                    "rank": rank
+                })
+                
+            history = []
+            for ev_id, data in events_map.items():
+                parts = data["parts"]
+                if len(parts) == 2:
+                    p1, p2 = parts[0], parts[1]
+                    is_p1_home = (p1["entity_id"] in data["venue"].lower() or p1["entity_id"] == data["venue"])
+                    home = p1 if is_p1_home else p2
+                    away = p2 if is_p1_home else p1
+                    
+                    history.append({
+                        "home_id": home["entity_id"],
+                        "away_id": away["entity_id"],
+                        "home_goals": home["goals"],
+                        "away_goals": away["goals"],
+                        "weight": 1.0
+                    })
+                    
+            if len(request.participant_entity_ids) < 2:
+                raise ValueError("Prediction requires at least 2 participants")
+                
+            pred_home = request.participant_entity_ids[0]
+            pred_away = request.participant_entity_ids[1]
+            
+            engine_input = {
+                "model_name": request.model_name or "poisson",
+                "history": history,
+                "predict_match": {
+                    "home_id": pred_home,
+                    "away_id": pred_away
+                }
+            }
+            
+            proc = subprocess.Popen(
+                [ENGINE_PATH, "--cli"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = proc.communicate(input=json.dumps(engine_input))
+            
+            if proc.returncode != 0:
+                raise RuntimeError(f"Engine process failed with code {proc.returncode}: {stderr}")
+                
+            res_json = json.loads(stdout)
+            probs = res_json.get("probabilities", {"win": 1.0/3.0, "draw": 1.0/3.0, "loss": 1.0/3.0})
+            
+            latency = (time.time() - start_time) * 1000.0
+            log_structured("PredictionService", "PredictEvent", latency, "SUCCESS", {"sport_id": request.sport_id})
+            
+            return domain_pb2.PredictionRecord(
+                event_id=f"pred_{int(time.time())}",
+                model_name=request.model_name or "poisson",
+                predicted_outcome_probs_json=json.dumps(probs),
+                predicted_result_json=json.dumps(probs),
+                generated_at=int(time.time())
+            )
+            
+        except Exception as e:
+            latency = (time.time() - start_time) * 1000.0
+            log_structured("PredictionService", "PredictEvent", latency, "ERROR", {"error": str(e)})
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            raise
