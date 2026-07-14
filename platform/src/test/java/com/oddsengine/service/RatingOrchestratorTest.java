@@ -29,6 +29,12 @@ public class RatingOrchestratorTest {
     private IngestionService ingestionService;
 
     @Autowired
+    private PredictionService predictionService;
+
+    @Autowired
+    private SimulationService simulationService;
+
+    @Autowired
     private CsvSportDataAdapter csvAdapter;
 
     @Autowired
@@ -179,5 +185,86 @@ public class RatingOrchestratorTest {
         boolean hasChelsea = snapshots.stream().anyMatch(s -> s.getEntityId().equals("chelsea") && "elo".equals(s.getModelName()));
         assertTrue(hasArsenal);
         assertTrue(hasChelsea);
+    }
+
+    @Test
+    public void testPredictionAndSimulationPipelines() throws Exception {
+        // Seeding database events if not present
+        SportEntity teamA = entityRepository.findById("test_team_a").orElseGet(() -> {
+            SportEntity s = new SportEntity();
+            s.setId("test_team_a");
+            s.setName("Test Team A");
+            s.setSportId("football");
+            s.setEntityType("team");
+            return entityRepository.save(s);
+        });
+
+        SportEntity teamB = entityRepository.findById("test_team_b").orElseGet(() -> {
+            SportEntity s = new SportEntity();
+            s.setId("test_team_b");
+            s.setName("Test Team B");
+            s.setSportId("football");
+            s.setEntityType("team");
+            return entityRepository.save(s);
+        });
+
+        SportEvent completedEvent = new SportEvent();
+        completedEvent.setId("pred_comp_1");
+        completedEvent.setSportId("football");
+        completedEvent.setTimestamp(1710000000L);
+        completedEvent.setStatus("completed");
+        completedEvent.setVenue("Test Team A");
+        eventRepository.save(completedEvent);
+
+        Participant cpA = new Participant();
+        cpA.setEventId("pred_comp_1");
+        cpA.setEntityId("test_team_a");
+        cpA.setFinishRank(1);
+        cpA.setResultDataJson("{\"goals\": 3}");
+        participantRepository.save(cpA);
+
+        Participant cpB = new Participant();
+        cpB.setEventId("pred_comp_1");
+        cpB.setEntityId("test_team_b");
+        cpB.setFinishRank(2);
+        cpB.setResultDataJson("{\"goals\": 1}");
+        participantRepository.save(cpB);
+
+        // Scheduled event to predict
+        SportEvent scheduledEvent = new SportEvent();
+        scheduledEvent.setId("pred_sched_1");
+        scheduledEvent.setSportId("football");
+        scheduledEvent.setTimestamp(1720000000L);
+        scheduledEvent.setStatus("scheduled");
+        scheduledEvent.setVenue("Test Team A");
+        eventRepository.save(scheduledEvent);
+
+        Participant spA = new Participant();
+        spA.setEventId("pred_sched_1");
+        spA.setEntityId("test_team_a");
+        participantRepository.save(spA);
+
+        Participant spB = new Participant();
+        spB.setEventId("pred_sched_1");
+        spB.setEntityId("test_team_b");
+        participantRepository.save(spB);
+
+        // Run prediction
+        com.oddsengine.model.PredictionRecord record = predictionService.predictMatch("pred_sched_1", "poisson");
+        assertNotNull(record);
+        assertEquals("pred_sched_1", record.getEventId());
+        assertTrue(record.getPredictedOutcomeProbsJson().contains("win"));
+
+        // Run simulation
+        String jobId = simulationService.startSimulation("football", 100);
+        assertNotNull(jobId);
+        
+        // Wait for task completion
+        Thread.sleep(1500);
+
+        SimulationService.SimulationJob job = simulationService.getJob(jobId);
+        assertNotNull(job);
+        assertEquals("COMPLETED", job.status);
+        assertNotNull(job.resultJson);
     }
 }
