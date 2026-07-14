@@ -3,6 +3,7 @@
 #include "poisson.hpp"
 #include "plackett_luce.hpp"
 #include "bayesian.hpp"
+#include "monte_carlo.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -154,6 +155,22 @@ void run_tests() {
     // 7d: CI shrinks as evidence increases
     assert(res_wins.ci_upper - res_wins.ci_lower < res_prior.ci_upper - res_prior.ci_lower);
 
+    // Test 8: Monte Carlo Season Simulator (3-team round-robin sanity check)
+    // Team A always beats B and C (win_prob=0.99). A should finish 1st in ~99% of sims.
+    std::vector<StandingRow> standings = {{"A", 0, 0}, {"B", 0, 0}, {"C", 0, 0}};
+    std::vector<SimFixture> fixtures = {
+        {"A", "B", 0.99, 0.01, 0.00},
+        {"A", "C", 0.99, 0.01, 0.00},
+        {"B", "C", 0.50, 0.20, 0.30}
+    };
+    auto mc = run_monte_carlo(standings, fixtures, 1000, 42);
+    // Find A's rank distribution
+    double a_rank1 = 0.0;
+    for (const auto& erd : mc.distributions) {
+        if (erd.entity_id == "A") a_rank1 = erd.rank_probs[0];
+    }
+    assert(a_rank1 > 0.90); // A wins > 90% of the time with 0.99 win prob against both
+
     std::cout << "All statistical core tests passed successfully!" << std::endl;
 }
 
@@ -215,6 +232,71 @@ void run_cli() {
                   << ", \"ci_lower\": " << result.ci_lower
                   << ", \"ci_upper\": " << result.ci_upper
                   << ", \"ci_level\": " << result.ci_level << "}" << std::endl;
+
+    } else if (model_name == "monte_carlo") {
+        // Expects: {"model_name":"monte_carlo","n_simulations":10000,"seed":42,
+        //   "standings":[{"entity_id":"ENG","points":10,"goal_diff":5},...],
+        //   "fixtures":[{"home_id":"ENG","away_id":"ARG","win_prob":0.55,"draw_prob":0.27,"loss_prob":0.18},...]}
+        int n_sims = 10000;
+        uint64_t mc_seed = 42;
+
+        auto pint = [&](const std::string& key) -> int {
+            size_t p = line.find(key); if (p == std::string::npos) return -1;
+            p = line.find(":", p); size_t e = line.find_first_of(",}", p);
+            return std::stoi(line.substr(p + 1, e - p - 1));
+        };
+        auto pdbl = [&](const std::string& key, size_t from = 0) -> double {
+            size_t p = line.find(key, from); if (p == std::string::npos) return -1.0;
+            p = line.find(":", p); size_t e = line.find_first_of(",}", p);
+            return std::stod(line.substr(p + 1, e - p - 1));
+        };
+
+        int tmp_n = pint("\"n_simulations\""); if (tmp_n > 0) n_sims = tmp_n;
+        double tmp_seed = pdbl("\"seed\""); if (tmp_seed >= 0.0) mc_seed = static_cast<uint64_t>(tmp_seed);
+
+        std::vector<StandingRow> mc_standings;
+        size_t st_pos = line.find("\"standings\"");
+        if (st_pos != std::string::npos) {
+            size_t st_end = line.find("]", st_pos);
+            while ((st_pos = line.find("\"entity_id\"", st_pos)) != std::string::npos && st_pos < st_end) {
+                st_pos = line.find("\"", st_pos + 11); size_t id_end = line.find("\"", st_pos + 1);
+                std::string eid = line.substr(st_pos + 1, id_end - st_pos - 1);
+                int pts = pint("\"points\""); int gd = pint("\"goal_diff\"");
+                mc_standings.push_back({eid, pts < 0 ? 0 : pts, gd < 0 ? 0 : gd});
+                st_pos = line.find("}", st_pos) + 1;
+            }
+        }
+
+        std::vector<SimFixture> mc_fixtures;
+        size_t fx_pos = line.find("\"fixtures\"");
+        if (fx_pos != std::string::npos) {
+            size_t fx_end = line.find("]", fx_pos);
+            while ((fx_pos = line.find("\"home_id\"", fx_pos)) != std::string::npos && fx_pos < fx_end) {
+                fx_pos = line.find("\"", fx_pos + 9); size_t h_end = line.find("\"", fx_pos + 1);
+                std::string hid = line.substr(fx_pos + 1, h_end - fx_pos - 1); fx_pos = h_end;
+                size_t a_pos = line.find("\"away_id\"", fx_pos);
+                a_pos = line.find("\"", a_pos + 9); size_t a_end = line.find("\"", a_pos + 1);
+                std::string aid = line.substr(a_pos + 1, a_end - a_pos - 1);
+                double wp = pdbl("\"win_prob\"", fx_pos), dp = pdbl("\"draw_prob\"", fx_pos), lp = pdbl("\"loss_prob\"", fx_pos);
+                mc_fixtures.push_back({hid, aid, wp < 0 ? 0.4 : wp, dp < 0 ? 0.3 : dp, lp < 0 ? 0.3 : lp});
+                fx_pos = line.find("}", fx_pos) + 1;
+            }
+        }
+
+        auto mc_result = run_monte_carlo(mc_standings, mc_fixtures, n_sims, mc_seed);
+        std::cout << "{\"rank_distributions\": {";
+        bool first_e = true;
+        for (const auto& erd : mc_result.distributions) {
+            if (!first_e) std::cout << ", ";
+            std::cout << "\"" << erd.entity_id << "\": [";
+            for (size_t ri = 0; ri < erd.rank_probs.size(); ++ri) {
+                if (ri > 0) std::cout << ", ";
+                std::cout << erd.rank_probs[ri];
+            }
+            std::cout << "]";
+            first_e = false;
+        }
+        std::cout << "}}" << std::endl;
 
     } else if (model_name == "glicko2") {
         struct ParsedGlicko {
