@@ -5,4 +5,6 @@
 - **Branching & PRs**: Always create a new branch and open a Pull Request (PR) whenever new features or changes are required.
 - **Branch Cleanup**: Regularly delete extra or stale branches that are no longer required to keep the repository clean.
 - **No Fast-Forward Merges**: Never use fast-forward merges (use `--no-ff`) to ensure branch topology is preserved.
+- **Sub-branching**: Create sub-branches from a main feature branch where possible to isolate sub-tasks or smaller features.
+- **Deferred Merges for Interlinked Phases**: If development phases are tightly interlinked or dependent, continue working on the branch/sub-branches without merging back to master until the combined features are complete.
 

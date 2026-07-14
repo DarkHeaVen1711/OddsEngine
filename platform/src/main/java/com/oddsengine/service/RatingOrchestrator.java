@@ -5,6 +5,7 @@ import com.oddsengine.model.RatingSnapshot;
 import com.oddsengine.model.SportEvent;
 import com.oddsengine.repository.ParticipantRepository;
 import com.oddsengine.repository.RatingSnapshotRepository;
+import com.oddsengine.repository.SportEntityRepository;
 import com.oddsengine.repository.SportEventRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,15 +21,18 @@ public class RatingOrchestrator {
     private final SportEventRepository eventRepository;
     private final ParticipantRepository participantRepository;
     private final RatingSnapshotRepository ratingRepository;
+    private final SportEntityRepository entityRepository;
 
     public RatingOrchestrator(EngineClient engineClient,
                               SportEventRepository eventRepository,
                               ParticipantRepository participantRepository,
-                              RatingSnapshotRepository ratingRepository) {
+                              RatingSnapshotRepository ratingRepository,
+                              SportEntityRepository entityRepository) {
         this.engineClient = engineClient;
         this.eventRepository = eventRepository;
         this.participantRepository = participantRepository;
         this.ratingRepository = ratingRepository;
+        this.entityRepository = entityRepository;
     }
 
     @Transactional
@@ -45,7 +49,18 @@ public class RatingOrchestrator {
         for (Participant p : participants) {
             Optional<RatingSnapshot> latest = ratingRepository.findLatestRating(p.getEntityId(), event.getSportId(), modelName);
             double currentRating = latest.map(RatingSnapshot::getRating).orElse(1500.0);
-            inputs.add(new EngineClient.ParticipantInput(p.getEntityId(), p.getFinishRank(), currentRating));
+            
+            long matchCount = participantRepository.countByEntityId(p.getEntityId());
+            int matchesPlayed = (int) Math.max(0, matchCount - 1);
+
+            boolean isHome = false;
+            if (event.getVenue() != null) {
+                isHome = entityRepository.findById(p.getEntityId())
+                        .map(entity -> event.getVenue().equalsIgnoreCase(entity.getName()))
+                        .orElse(false);
+            }
+
+            inputs.add(new EngineClient.ParticipantInput(p.getEntityId(), p.getFinishRank(), currentRating, isHome, matchesPlayed));
         }
 
         Map<String, Double> newRatings = engineClient.calculateRatings(inputs);

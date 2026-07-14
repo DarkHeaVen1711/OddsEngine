@@ -55,6 +55,7 @@ public class RatingOrchestratorTest {
         event.setSportId("football");
         event.setTimestamp(1710000000L);
         event.setStatus("completed");
+        event.setVenue("Test Team A");
         eventRepository.save(event);
 
         Participant pA = new Participant();
@@ -84,7 +85,8 @@ public class RatingOrchestratorTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertEquals(1516.0, snapshotA.getRating());
-        assertEquals(1484.0, snapshotB.getRating());
+        // 1500 (home) vs 1500 (away) with A winning -> A gets ~1511.518, B gets ~1488.482
+        assertEquals(1511.518, snapshotA.getRating(), 0.001);
+        assertEquals(1488.482, snapshotB.getRating(), 0.001);
     }
 }
