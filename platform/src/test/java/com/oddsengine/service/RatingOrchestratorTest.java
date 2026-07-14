@@ -267,4 +267,53 @@ public class RatingOrchestratorTest {
         assertEquals("COMPLETED", job.status);
         assertNotNull(job.resultJson);
     }
+
+    @Test
+    public void testRatingUpdateIdempotencyAndEdgeCases() {
+        // 1. Idempotency Test
+        List<RatingSnapshot> snapshotsRun1 = orchestrator.processEventRatings("test_event_1", "elo");
+        List<RatingSnapshot> snapshotsRun2 = orchestrator.processEventRatings("test_event_1", "elo");
+        
+        assertEquals(snapshotsRun1.size(), snapshotsRun2.size());
+        for (int i = 0; i < snapshotsRun1.size(); i++) {
+            assertEquals(snapshotsRun1.get(i).getRating(), snapshotsRun2.get(i).getRating(), 0.001);
+            assertEquals(snapshotsRun1.get(i).getRatingDeviation(), snapshotsRun2.get(i).getRatingDeviation(), 0.001);
+        }
+
+        // 2. Edge Case: Zero History Entity
+        SportEntity newTeam = new SportEntity();
+        newTeam.setId("new_team_with_zero_history");
+        newTeam.setName("New Team Zero History");
+        newTeam.setSportId("football");
+        newTeam.setEntityType("team");
+        entityRepository.save(newTeam);
+
+        SportEvent newEvent = new SportEvent();
+        newEvent.setId("new_event_zero_history");
+        newEvent.setSportId("football");
+        newEvent.setTimestamp(1730000000L);
+        newEvent.setStatus("completed");
+        eventRepository.save(newEvent);
+
+        Participant np1 = new Participant();
+        np1.setEventId("new_event_zero_history");
+        np1.setEntityId("new_team_with_zero_history");
+        np1.setFinishRank(1);
+        participantRepository.save(np1);
+
+        Participant np2 = new Participant();
+        np2.setEventId("new_event_zero_history");
+        np2.setEntityId("test_team_b");
+        np2.setFinishRank(2);
+        participantRepository.save(np2);
+
+        List<RatingSnapshot> snapshotsNew = orchestrator.processEventRatings("new_event_zero_history", "glicko2");
+        RatingSnapshot newTeamSnapshot = snapshotsNew.stream()
+                .filter(s -> s.getEntityId().equals("new_team_with_zero_history"))
+                .findFirst()
+                .orElseThrow();
+        
+        assertTrue(newTeamSnapshot.getRating() > 1500.0);
+        assertTrue(newTeamSnapshot.getRatingDeviation() < 350.0);
+    }
 }
