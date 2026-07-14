@@ -2,6 +2,7 @@
 #include "glicko2.hpp"
 #include "poisson.hpp"
 #include "plackett_luce.hpp"
+#include "bayesian.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -124,6 +125,35 @@ void run_tests() {
     assert(pl_probs["ent1"] > pl_probs["ent2"]);
     assert(std::abs(pl_probs["ent1"] + pl_probs["ent2"] - 1.0) < 1e-6);
 
+    // Test 7: Bayesian Updating Layer
+    // 7a: Poisson prior seeded, no updates — mean matches Poisson output
+    BayesianModel bayes;
+    bayes.init_from_poisson(0.5474, 0.2745, 0.1780);
+    auto res_prior = bayes.get_result(0.90);
+    assert(std::abs(res_prior.mean - 0.5474) < 0.01);
+    assert(res_prior.ci_lower < res_prior.mean);
+    assert(res_prior.ci_upper > res_prior.mean);
+
+    // 7b: weak prior (kappa=2) + 10 wins → posterior mean > 0.80, CI entirely above 0.50
+    // With kappa=2: alpha_w=1, alpha_d=0.5, alpha_l=0.5 → after 10 wins: 11/12 ≈ 0.917
+    BayesianModel bayes_wins;
+    bayes_wins.init_from_poisson(0.5, 0.25, 0.25, 2.0);
+    for (int i = 0; i < 10; ++i) bayes_wins.update(1.0);
+    auto res_wins = bayes_wins.get_result(0.90);
+    assert(res_wins.mean > 0.80);
+    assert(res_wins.ci_lower > 0.50);
+
+    // 7c: 5 wins + 5 losses → posterior mean ≈ 0.50
+    BayesianModel bayes_even;
+    bayes_even.init_from_elo(0.5);
+    for (int i = 0; i < 5; ++i) bayes_even.update(1.0);
+    for (int i = 0; i < 5; ++i) bayes_even.update(0.0);
+    auto res_even = bayes_even.get_result(0.90);
+    assert(std::abs(res_even.mean - 0.5) < 0.05);
+
+    // 7d: CI shrinks as evidence increases
+    assert(res_wins.ci_upper - res_wins.ci_lower < res_prior.ci_upper - res_prior.ci_lower);
+
     std::cout << "All statistical core tests passed successfully!" << std::endl;
 }
 
@@ -143,7 +173,50 @@ void run_cli() {
         model_name = line.substr(model_pos + 1, model_end - model_pos - 1);
     }
 
-    if (model_name == "glicko2") {
+    if (model_name == "bayesian") {
+        // Expects: {"model_name":"bayesian","prior":{"win":0.5474,"draw":0.2745,"loss":0.1780},"kappa":10.0,"outcomes":[1.0,0.0,1.0,...]}
+        double prior_win = 1.0/3.0, prior_draw = 1.0/3.0, prior_loss = 1.0/3.0, kappa = 10.0;
+
+        auto parse_double = [&](const std::string& key) -> double {
+            size_t p = line.find(key);
+            if (p == std::string::npos) return -1.0;
+            p = line.find(":", p);
+            size_t e = line.find_first_of(",}", p);
+            return std::stod(line.substr(p + 1, e - p - 1));
+        };
+
+        double v;
+        if ((v = parse_double("\"win\""))   >= 0.0) prior_win  = v;
+        if ((v = parse_double("\"draw\""))  >= 0.0) prior_draw = v;
+        if ((v = parse_double("\"loss\""))  >= 0.0) prior_loss = v;
+        if ((v = parse_double("\"kappa\"")) >= 0.0) kappa      = v;
+
+        BayesianModel bayes;
+        bayes.init_from_poisson(prior_win, prior_draw, prior_loss, kappa);
+
+        size_t o_pos = line.find("\"outcomes\"");
+        if (o_pos != std::string::npos) {
+            size_t o_end = line.find("]", o_pos);
+            o_pos = line.find("[", o_pos);
+            while (o_pos < o_end) {
+                size_t num_start = line.find_first_of("0123456789.-", o_pos + 1);
+                if (num_start == std::string::npos || num_start >= o_end) break;
+                size_t num_end = line.find_first_of(",]", num_start);
+                bayes.update(std::stod(line.substr(num_start, num_end - num_start)));
+                o_pos = num_end;
+            }
+        }
+
+        double ci_level = 0.90;
+        if ((v = parse_double("\"ci_level\"")) >= 0.0) ci_level = v;
+
+        auto result = bayes.get_result(ci_level);
+        std::cout << "{\"win_probability\": " << result.mean
+                  << ", \"ci_lower\": " << result.ci_lower
+                  << ", \"ci_upper\": " << result.ci_upper
+                  << ", \"ci_level\": " << result.ci_level << "}" << std::endl;
+
+    } else if (model_name == "glicko2") {
         struct ParsedGlicko {
             std::string id;
             int rank;
