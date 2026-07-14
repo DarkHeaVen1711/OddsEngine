@@ -19,3 +19,6 @@ build/
 # Gradle build directories
 platform/build/
 .gradle/
+platform/bin/
+__pycache__/
+*.pyc
