@@ -108,7 +108,7 @@ void PoissonModel::fit(
         // Gradient update and boundary constraints clamping
         for (size_t j = 0; j < p.size(); ++j) {
             p[j] -= learning_rate * grad[j];
-            if (j < 2 * m + 1) {
+            if (j < static_cast<size_t>(2 * m + 1)) {
                 p[j] = std::max(0.05, p[j]); // positive coefficients
             } else {
                 p[j] = std::max(0.0, std::min(0.15, p[j])); // covariance bounds
