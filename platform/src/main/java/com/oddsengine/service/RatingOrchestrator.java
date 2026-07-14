@@ -49,6 +49,8 @@ public class RatingOrchestrator {
         for (Participant p : participants) {
             Optional<RatingSnapshot> latest = ratingRepository.findLatestRating(p.getEntityId(), event.getSportId(), modelName);
             double currentRating = latest.map(RatingSnapshot::getRating).orElse(1500.0);
+            double currentRd = latest.map(RatingSnapshot::getRatingDeviation).orElse(350.0);
+            double currentVol = latest.map(RatingSnapshot::getVolatility).orElse(0.06);
             
             long matchCount = participantRepository.countByEntityId(p.getEntityId());
             int matchesPlayed = (int) Math.max(0, matchCount - 1);
@@ -60,22 +62,26 @@ public class RatingOrchestrator {
                         .orElse(false);
             }
 
-            inputs.add(new EngineClient.ParticipantInput(p.getEntityId(), p.getFinishRank(), currentRating, isHome, matchesPlayed));
+            inputs.add(new EngineClient.ParticipantInput(p.getEntityId(), p.getFinishRank(), currentRating, isHome, matchesPlayed, currentRd, currentVol));
         }
 
-        Map<String, Double> newRatings = engineClient.calculateRatings(inputs);
+        Map<String, EngineClient.RatingOutput> newRatings = engineClient.calculateRatings(inputs, modelName);
 
         List<RatingSnapshot> snapshots = new ArrayList<>();
         for (Participant p : participants) {
-            double ratingValue = newRatings.getOrDefault(p.getEntityId(), 1500.0);
+            EngineClient.RatingOutput output = newRatings.get(p.getEntityId());
+            double ratingValue = (output != null) ? output.rating : 1500.0;
+            double deviationValue = (output != null) ? output.rating_deviation : 350.0;
+            double volatilityValue = (output != null) ? output.volatility : 0.06;
+
             RatingSnapshot snapshot = new RatingSnapshot();
             snapshot.setEntityId(p.getEntityId());
             snapshot.setSportId(event.getSportId());
             snapshot.setModelName(modelName);
             snapshot.setAsOfTimestamp(event.getTimestamp());
             snapshot.setRating(ratingValue);
-            snapshot.setRatingDeviation(350.0);
-            snapshot.setVolatility(0.06);
+            snapshot.setRatingDeviation(deviationValue);
+            snapshot.setVolatility(volatilityValue);
             snapshots.add(ratingRepository.save(snapshot));
         }
 

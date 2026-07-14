@@ -22,18 +22,34 @@ public class EngineClient {
         public double current_rating;
         public boolean is_home;
         public int matches_played;
+        public double rating_deviation;
+        public double volatility;
 
-        public ParticipantInput(String entity_id, int finish_rank, double current_rating, boolean is_home, int matches_played) {
+        public ParticipantInput(String entity_id, int finish_rank, double current_rating, boolean is_home, int matches_played, double rating_deviation, double volatility) {
             this.entity_id = entity_id;
             this.finish_rank = finish_rank;
             this.current_rating = current_rating;
             this.is_home = is_home;
             this.matches_played = matches_played;
+            this.rating_deviation = rating_deviation;
+            this.volatility = volatility;
         }
     }
 
-    public Map<String, Double> calculateRatings(List<ParticipantInput> participants) {
-        Map<String, Double> results = new HashMap<>();
+    public static class RatingOutput {
+        public double rating;
+        public double rating_deviation;
+        public double volatility;
+
+        public RatingOutput(double rating, double rating_deviation, double volatility) {
+            this.rating = rating;
+            this.rating_deviation = rating_deviation;
+            this.volatility = volatility;
+        }
+    }
+
+    public Map<String, RatingOutput> calculateRatings(List<ParticipantInput> participants, String modelName) {
+        Map<String, RatingOutput> results = new HashMap<>();
         try {
             String enginePath = findEngineExecutable();
             if (enginePath == null) {
@@ -41,6 +57,7 @@ public class EngineClient {
             }
 
             Map<String, Object> inputMap = new HashMap<>();
+            inputMap.put("model_name", modelName);
             inputMap.put("participants", participants);
             String inputJson = objectMapper.writeValueAsString(inputMap);
 
@@ -65,7 +82,16 @@ public class EngineClient {
             JsonNode root = objectMapper.readTree(outputJson);
             JsonNode ratingsNode = root.path("ratings");
             ratingsNode.fields().forEachRemaining(entry -> {
-                results.put(entry.getKey(), entry.getValue().asDouble());
+                JsonNode val = entry.getValue();
+                if (val.isNumber()) {
+                    results.put(entry.getKey(), new RatingOutput(val.asDouble(), 350.0, 0.06));
+                } else {
+                    results.put(entry.getKey(), new RatingOutput(
+                        val.path("rating").asDouble(),
+                        val.path("rating_deviation").asDouble(),
+                        val.path("volatility").asDouble()
+                    ));
+                }
             });
 
         } catch (Exception e) {
