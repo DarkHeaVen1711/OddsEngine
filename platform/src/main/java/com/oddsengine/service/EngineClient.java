@@ -100,6 +100,50 @@ public class EngineClient {
         return results;
     }
 
+    public String predictEvent(String modelName, List<Map<String, Object>> history, String homeId, String awayId) {
+        try {
+            String enginePath = findEngineExecutable();
+            if (enginePath == null) {
+                throw new RuntimeException("Could not locate engine.exe in the project directory.");
+            }
+
+            Map<String, Object> inputMap = new HashMap<>();
+            inputMap.put("model_name", modelName);
+            inputMap.put("history", history);
+            Map<String, String> predictMatch = new HashMap<>();
+            predictMatch.put("home_id", homeId);
+            predictMatch.put("away_id", awayId);
+            inputMap.put("predict_match", predictMatch);
+            
+            String inputJson = objectMapper.writeValueAsString(inputMap);
+
+            ProcessBuilder pb = new ProcessBuilder(enginePath, "--cli");
+            Process process = pb.start();
+
+            try (OutputStream os = process.getOutputStream()) {
+                os.write(inputJson.getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+
+            String outputJson;
+            try (InputStream is = process.getInputStream()) {
+                outputJson = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new RuntimeException("Engine subprocess exited with code " + exitCode);
+            }
+
+            JsonNode root = objectMapper.readTree(outputJson);
+            return objectMapper.writeValueAsString(root.path("probabilities"));
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error calculating predictions through engine: " + e.getMessage(), e);
+        }
+    }
+
+
     private String findEngineExecutable() {
         String[] paths = {
             "../engine/engine.exe",
