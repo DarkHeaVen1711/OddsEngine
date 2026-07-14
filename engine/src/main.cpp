@@ -134,9 +134,10 @@ void run_tests() {
     assert(res_prior.ci_lower < res_prior.mean);
     assert(res_prior.ci_upper > res_prior.mean);
 
-    // 7b: 10 wins → posterior mean > 0.80, CI entirely above 0.50
+    // 7b: weak prior (kappa=2) + 10 wins → posterior mean > 0.80, CI entirely above 0.50
+    // With kappa=2: alpha_w=1, alpha_d=0.5, alpha_l=0.5 → after 10 wins: 11/12 ≈ 0.917
     BayesianModel bayes_wins;
-    bayes_wins.init_from_poisson(0.5, 0.25, 0.25);
+    bayes_wins.init_from_poisson(0.5, 0.25, 0.25, 2.0);
     for (int i = 0; i < 10; ++i) bayes_wins.update(1.0);
     auto res_wins = bayes_wins.get_result(0.90);
     assert(res_wins.mean > 0.80);
