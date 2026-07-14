@@ -1,0 +1,21 @@
+# IDE and environment
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Build and compilation
+*.o
+*.obj
+*.exe
+*.out
+engine/engine
+build/
+
+# Database files
+*.sqlite3
+*.db
+
+# Gradle build directories
+platform/build/
+.gradle/
