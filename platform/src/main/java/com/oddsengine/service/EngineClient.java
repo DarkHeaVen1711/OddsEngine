@@ -20,11 +20,15 @@ public class EngineClient {
         public String entity_id;
         public int finish_rank;
         public double current_rating;
+        public boolean is_home;
+        public int matches_played;
 
-        public ParticipantInput(String entity_id, int finish_rank, double current_rating) {
+        public ParticipantInput(String entity_id, int finish_rank, double current_rating, boolean is_home, int matches_played) {
             this.entity_id = entity_id;
             this.finish_rank = finish_rank;
             this.current_rating = current_rating;
+            this.is_home = is_home;
+            this.matches_played = matches_played;
         }
     }
 
