@@ -1,5 +1,8 @@
 #include "elo.hpp"
 #include <iostream>
+#include <string>
+#include <vector>
+#include <map>
 #include <cassert>
 #include <cmath>
 
@@ -48,10 +51,6 @@ void run_tests() {
     };
 
     auto race_updates = calculate_elo_updates(race, race_ratings, 32.0);
-    // All start at 1500, so E_ij = 0.5.
-    // For A (1st): change_A = 32.0 * ((1.0 - 0.5) + (1.0 - 0.5)) / 2 = 16.0 -> 1516.0
-    // For B (2nd): change_B = 32.0 * ((0.0 - 0.5) + (1.0 - 0.5)) / 2 = 0.0 -> 1500.0
-    // For C (3rd): change_C = 32.0 * ((0.0 - 0.5) + (0.0 - 0.5)) / 2 = -16.0 -> 1484.0
     assert(std::abs(race_updates["A"] - 1516.0) < 0.001);
     assert(std::abs(race_updates["B"] - 1500.0) < 0.001);
     assert(std::abs(race_updates["C"] - 1484.0) < 0.001);
@@ -59,7 +58,62 @@ void run_tests() {
     std::cout << "All statistical core tests passed successfully!" << std::endl;
 }
 
-int main() {
-    run_tests();
+// Simple manual parser to avoid JSON dependencies.
+// Expects: {"participants": [{"entity_id":"id","finish_rank":1,"current_rating":1500.0}, ...]}
+void run_cli() {
+    std::string line;
+    if (!std::getline(std::cin, line)) return;
+
+    using namespace oddsengine;
+    Event event;
+    event.id = "cli_event";
+    event.sport_id = "general";
+    std::map<std::string, double> current_ratings;
+
+    size_t pos = 0;
+    while (true) {
+        pos = line.find("\"entity_id\"", pos);
+        if (pos == std::string::npos) break;
+
+        pos = line.find("\"", pos + 11);
+        size_t id_end = line.find("\"", pos + 1);
+        std::string entity_id = line.substr(pos + 1, id_end - pos - 1);
+        pos = id_end;
+
+        pos = line.find("\"finish_rank\"", pos);
+        pos = line.find(":", pos);
+        size_t rank_end = line.find_first_of(",}", pos);
+        int finish_rank = std::stoi(line.substr(pos + 1, rank_end - pos - 1));
+        pos = rank_end;
+
+        pos = line.find("\"current_rating\"", pos);
+        pos = line.find(":", pos);
+        size_t rating_end = line.find_first_of(",}", pos);
+        double rating = std::stod(line.substr(pos + 1, rating_end - pos - 1));
+        pos = rating_end;
+
+        event.participants.push_back({entity_id, finish_rank});
+        current_ratings[entity_id] = rating;
+    }
+
+    auto updates = calculate_elo_updates(event, current_ratings);
+
+    std::cout << "{\"ratings\": {";
+    bool first = true;
+    for (const auto& pair : updates) {
+        if (!first) std::cout << ", ";
+        std::cout << "\"" << pair.first << "\": " << pair.second;
+        first = false;
+    }
+    std::cout << "}}" << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+    if (argc > 1 && std::string(argv[1]) == "--cli") {
+        run_cli();
+    } else {
+        run_tests();
+    }
     return 0;
 }
+
