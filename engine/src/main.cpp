@@ -4,6 +4,7 @@
 #include "plackett_luce.hpp"
 #include "bayesian.hpp"
 #include "monte_carlo.hpp"
+#include "eval.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -171,6 +172,29 @@ void run_tests() {
     }
     assert(a_rank1 > 0.90); // A wins > 90% of the time with 0.99 win prob against both
 
+    // Test 9: Model Evaluation & Backtesting
+    std::vector<PredictionRecord> eval_preds = {
+        {0.7, 0.2, 0.1, 1},
+        {0.2, 0.6, 0.2, 0},
+        {0.1, 0.3, 0.6, -1}
+    };
+    auto eval_res = evaluate(eval_preds, 5);
+    assert(eval_res.brier_score < 0.3);
+    assert(eval_res.log_loss < 0.65);
+    assert(eval_res.calibration_buckets.size() == 5);
+
+    std::vector<MatchRecord> backtest_hist = {
+        {"H", "A", 3, 0, 1.0},
+        {"H", "A", 2, 1, 1.0},
+        {"A", "H", 0, 2, 1.0},
+        {"H", "A", 4, 1, 1.0},
+        {"A", "H", 1, 3, 1.0},
+        {"H", "A", 3, 1, 1.0}
+    };
+    auto backtest_res = rolling_backtest(backtest_hist, 3);
+    assert(backtest_res.n_predictions == 3);
+    assert(backtest_res.brier_score > 0.0);
+
     std::cout << "All statistical core tests passed successfully!" << std::endl;
 }
 
@@ -190,7 +214,58 @@ void run_cli() {
         model_name = line.substr(model_pos + 1, model_end - model_pos - 1);
     }
 
-    if (model_name == "bayesian") {
+    if (model_name == "eval") {
+        std::string mode = (line.find("\"backtest\"") != std::string::npos) ? "backtest" : "evaluate";
+        if (mode == "evaluate") {
+            std::vector<PredictionRecord> preds;
+            size_t pos = 0;
+            while ((pos = line.find("\"predicted_win\"", pos)) != std::string::npos) {
+                auto get_d = [&](const std::string& k) {
+                    size_t idx = line.find(k, pos - 20);
+                    return std::stod(line.substr(line.find(":", idx) + 1, line.find_first_of(",}", idx) - line.find(":", idx) - 1));
+                };
+                preds.push_back({get_d("\"predicted_win\""), get_d("\"predicted_draw\""), get_d("\"predicted_loss\""), 
+                                 static_cast<int>(get_d("\"actual_outcome\""))});
+                pos += 15;
+            }
+            int n_bins = 10;
+            size_t nb = line.find("\"n_bins\"");
+            if (nb != std::string::npos) n_bins = std::stoi(line.substr(line.find(":", nb) + 1, line.find_first_of(",}", nb) - line.find(":", nb) - 1));
+            
+            auto eval = evaluate(preds, n_bins);
+            std::cout << "{\"brier_score\":" << eval.brier_score << ",\"log_loss\":" << eval.log_loss << ",\"calibration_buckets\":[";
+            for (size_t i = 0; i < eval.calibration_buckets.size(); ++i) {
+                const auto& b = eval.calibration_buckets[i];
+                if (i > 0) std::cout << ",";
+                std::cout << "{\"bin_lower\":" << b.bin_lower << ",\"bin_upper\":" << b.bin_upper 
+                          << ",\"predicted_freq\":" << b.predicted_freq << ",\"actual_freq\":" << b.actual_freq 
+                          << ",\"count\":" << b.count << "}";
+            }
+            std::cout << "]}" << std::endl;
+        } else {
+            std::vector<MatchRecord> history;
+            size_t pos = 0;
+            while ((pos = line.find("\"home_id\"", pos)) != std::string::npos) {
+                auto get_str = [&](const std::string& k) {
+                    size_t idx = line.find(k, pos - 10);
+                    size_t s = line.find("\"", line.find(":", idx));
+                    return line.substr(s + 1, line.find("\"", s + 1) - s - 1);
+                };
+                auto get_val = [&](const std::string& k) {
+                    size_t idx = line.find(k, pos - 10);
+                    return std::stod(line.substr(line.find(":", idx) + 1, line.find_first_of(",}", idx) - line.find(":", idx) - 1));
+                };
+                history.push_back({get_str("\"home_id\""), get_str("\"away_id\""), 
+                                  static_cast<int>(get_val("\"home_goals\"")), static_cast<int>(get_val("\"away_goals\"")), get_val("\"weight\"")});
+                pos += 9;
+            }
+            int min_train = 5;
+            size_t mt = line.find("\"min_training_matches\"");
+            if (mt != std::string::npos) min_train = std::stoi(line.substr(line.find(":", mt) + 1, line.find_first_of(",}", mt) - line.find(":", mt) - 1));
+            auto res = rolling_backtest(history, min_train);
+            std::cout << "{\"brier_score\":" << res.brier_score << ",\"log_loss\":" << res.log_loss << ",\"n_predictions\":" << res.n_predictions << "}" << std::endl;
+        }
+    } else if (model_name == "bayesian") {
         // Expects: {"model_name":"bayesian","prior":{"win":0.5474,"draw":0.2745,"loss":0.1780},"kappa":10.0,"outcomes":[1.0,0.0,1.0,...]}
         double prior_win = 1.0/3.0, prior_draw = 1.0/3.0, prior_loss = 1.0/3.0, kappa = 10.0;
 
