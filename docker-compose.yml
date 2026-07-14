@@ -1,0 +1,75 @@
+# OddsEngine — Full Stack Docker Compose
+# Start everything: docker-compose up --build
+# Services:
+#   engine   → gRPC on :50051   (C++ stats core + Python gRPC wrapper)
+#   platform → REST  on :8080   (Spring Boot Java platform)
+#   frontend → HTTP  on :3000   (Next.js dashboard)
+
+services:
+
+  # ── C++ Statistics Engine (gRPC server) ──────────────────────────────────
+  engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    container_name: oddsengine-engine
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=5)\" 2>/dev/null && echo ok || exit 1"]
+      interval: 10s
+      timeout: 6s
+      retries: 5
+      start_period: 15s
+
+  # ── Java Spring Boot Platform (REST API) ─────────────────────────────────
+  platform:
+    build:
+      context: ./platform
+      dockerfile: Dockerfile
+    container_name: oddsengine-platform
+    ports:
+      - "8080:8080"
+    environment:
+      # Override SQLite path to use the mounted volume
+      - SPRING_DATASOURCE_URL=jdbc:sqlite:/app/data/db.sqlite3
+      # gRPC engine address — resolved by Docker DNS to the engine service
+      - ENGINE_GRPC_HOST=engine
+      - ENGINE_GRPC_PORT=50051
+    volumes:
+      # Persist SQLite database across container restarts
+      - platform-data:/app/data
+    depends_on:
+      engine:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+  # ── Next.js Frontend Dashboard ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Bake the platform API URL into the Next.js build
+        NEXT_PUBLIC_API_URL: "http://platform:8080"
+    container_name: oddsengine-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    depends_on:
+      platform:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Named volume for SQLite database persistence
+  platform-data:
