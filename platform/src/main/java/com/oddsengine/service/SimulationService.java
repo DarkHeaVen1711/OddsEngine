@@ -1,6 +1,9 @@
 package com.oddsengine.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oddsengine.model.Participant;
+import com.oddsengine.model.SportEntity;
+import com.oddsengine.model.SportEvent;
 import com.oddsengine.repository.ParticipantRepository;
 import com.oddsengine.repository.SportEntityRepository;
 import com.oddsengine.repository.SportEventRepository;
@@ -8,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
