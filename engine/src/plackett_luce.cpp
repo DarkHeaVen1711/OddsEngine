@@ -62,4 +62,92 @@ double compute_pl_nll(
     return nll;
 }
 
+void PlackettLuceModel::fit(
+    const std::vector<RaceRecord>& history,
+    int max_iterations,
+    double learning_rate
+) {
+    std::set<std::string> d_set;
+    std::set<std::string> c_set;
+    std::map<std::string, int> constructor_entries;
+    std::map<std::string, int> constructor_dnfs;
+
+    for (const auto& race : history) {
+        for (const auto& part : race.participants) {
+            d_set.insert(part.driver_id);
+            c_set.insert(part.constructor_id);
+
+            constructor_entries[part.constructor_id]++;
+            if (part.is_dnf) {
+                constructor_dnfs[part.constructor_id]++;
+            }
+        }
+    }
+
+    std::vector<std::string> drivers(d_set.begin(), d_set.end());
+    std::vector<std::string> constructors(c_set.begin(), c_set.end());
+
+    int num_d = drivers.size();
+    int num_c = constructors.size();
+    if (num_d == 0 || num_c == 0) return;
+
+    constructor_dnf_rates.clear();
+    for (const auto& c : constructors) {
+        double entries = constructor_entries[c];
+        double dnfs = constructor_dnfs[c];
+        constructor_dnf_rates[c] = (entries > 0) ? (dnfs / entries) : 0.05;
+    }
+
+    std::vector<double> p(num_d + num_c + 1);
+    for (int i = 0; i < num_d; ++i) p[i] = 1.0;
+    for (int i = 0; i < num_c; ++i) p[num_d + i] = 1.0;
+    p[num_d + num_c] = 0.05; // grid penalty alpha
+
+    double h = 1e-5;
+    for (int iter = 0; iter < max_iterations; ++iter) {
+        std::vector<double> grad(num_d + num_c + 1, 0.0);
+        for (size_t j = 0; j < p.size(); ++j) {
+            double old_val = p[j];
+            p[j] = old_val + h;
+            double nll_plus = compute_pl_nll(history, drivers, constructors, p);
+            p[j] = old_val - h;
+            double nll_minus = compute_pl_nll(history, drivers, constructors, p);
+            p[j] = old_val;
+
+            grad[j] = (nll_plus - nll_minus) / (2.0 * h);
+        }
+
+        for (size_t j = 0; j < p.size(); ++j) {
+            p[j] -= learning_rate * grad[j];
+            if (j < p.size() - 1) {
+                p[j] = std::max(0.05, p[j]); // skills positive
+            } else {
+                p[j] = std::max(0.01, std::min(0.20, p[j])); // alpha penalty limits
+            }
+        }
+    }
+
+    driver_skills.clear();
+    constructor_skills.clear();
+    double avg_d = 0.0;
+    for (int i = 0; i < num_d; ++i) {
+        driver_skills[drivers[i]] = p[i];
+        avg_d += p[i];
+    }
+    for (int i = 0; i < num_c; ++i) {
+        constructor_skills[constructors[i]] = p[num_d + i];
+    }
+    grid_penalty = p[num_d + num_c];
+
+    if (num_d > 0) {
+        avg_d /= num_d;
+        for (int i = 0; i < num_d; ++i) {
+            driver_skills[drivers[i]] /= avg_d;
+        }
+        for (int i = 0; i < num_c; ++i) {
+            constructor_skills[constructors[i]] *= avg_d;
+        }
+    }
+}
+
 } // namespace oddsengine
