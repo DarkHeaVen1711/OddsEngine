@@ -10,6 +10,8 @@ namespace oddsengine {
 struct Participant {
     std::string entity_id;
     int finish_rank;
+    bool is_home;
+    int matches_played;
 };
 
 struct Event {
@@ -28,7 +30,7 @@ struct Rating {
 std::map<std::string, double> calculate_elo_updates(
     const Event& event,
     const std::map<std::string, double>& current_ratings,
-    double k_factor = 32.0
+    double k_factor = 16.0
 );
 
 } // namespace oddsengine

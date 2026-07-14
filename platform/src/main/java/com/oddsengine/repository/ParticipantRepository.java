@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface ParticipantRepository extends JpaRepository<Participant, ParticipantId> {
     List<Participant> findByEventId(String eventId);
+    long countByEntityId(String entityId);
 }
