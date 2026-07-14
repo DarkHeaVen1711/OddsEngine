@@ -296,7 +296,7 @@ export default function Dashboard() {
               )}
             </div>
             <div>
-              <h3 style={{ marginBottom: "1rem", fontSize: "1.1rem", color: var(--text-secondary) }}>Standings Probabilities (1st, 2nd, 3rd, 4th)</h3>
+              <h3 style={{ marginBottom: "1rem", fontSize: "1.1rem", color: "var(--text-secondary)" }}>Standings Probabilities (1st, 2nd, 3rd, 4th)</h3>
               {simResults ? (
                 Object.keys(simResults).map((team) => (
                   <div key={team} className="standing-row">
@@ -306,7 +306,7 @@ export default function Dashboard() {
                   </div>
                 ))
               ) : (
-                <p style={{ color: var(--text-secondary) }}>Click run to simulate final standings distribution.</p>
+                <p style={{ color: "var(--text-secondary)" }}>Click run to simulate final standings distribution.</p>
               )}
             </div>
           </div>
