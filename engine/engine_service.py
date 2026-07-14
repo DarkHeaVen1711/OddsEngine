@@ -221,3 +221,155 @@ class PredictionServiceImpl(services_pb2_grpc.PredictionServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             raise
+
+class SimulationServiceImpl(services_pb2_grpc.SimulationServiceServicer):
+    def SimulateSeason(self, request, context):
+        start_time = time.time()
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT id, name FROM entities")
+            entities = cursor.fetchall()
+            
+            mc_standings = []
+            for ent_id, name in entities:
+                mc_standings.append({
+                    "entity_id": ent_id,
+                    "points": 0,
+                    "goal_diff": 0
+                })
+                
+            cursor.execute("""
+                SELECT e.id, e.venue, p.entity_id, p.result_data_json, p.finish_rank
+                FROM events e
+                JOIN participants p ON e.id = p.event_id
+                WHERE e.status = 'completed'
+            """)
+            rows = cursor.fetchall()
+            
+            events_map = {}
+            for row in rows:
+                ev_id, venue, ent_id, res_json, rank = row
+                if ev_id not in events_map:
+                    events_map[ev_id] = {"venue": venue, "parts": []}
+                goals = 0
+                try:
+                    if res_json:
+                        goals = json.loads(res_json).get("goals", 0)
+                except Exception:
+                    pass
+                events_map[ev_id]["parts"].append({"entity_id": ent_id, "goals": goals, "rank": rank})
+                
+            for ev_id, data in events_map.items():
+                parts = data["parts"]
+                if len(parts) == 2:
+                    p1, p2 = parts[0], parts[1]
+                    is_p1_home = (p1["entity_id"] in data["venue"].lower() or p1["entity_id"] == data["venue"])
+                    home = p1 if is_p1_home else p2
+                    away = p2 if is_p1_home else p1
+                    
+                    for s in mc_standings:
+                        if s["entity_id"] == home["entity_id"]:
+                            s["goal_diff"] += (home["goals"] - away["goals"])
+                            if home["goals"] > away["goals"]: s["points"] += 3
+                            elif home["goals"] == away["goals"]: s["points"] += 1
+                        elif s["entity_id"] == away["entity_id"]:
+                            s["goal_diff"] += (away["goals"] - home["goals"])
+                            if away["goals"] > home["goals"]: s["points"] += 3
+                            elif home["goals"] == away["goals"]: s["points"] += 1
+                            
+            cursor.execute("""
+                SELECT e.id, e.venue, p.entity_id
+                FROM events e
+                JOIN participants p ON e.id = p.event_id
+                WHERE e.status = 'scheduled'
+            """)
+            fixtures_rows = cursor.fetchall()
+            conn.close()
+            
+            fixtures_map = {}
+            for r in fixtures_rows:
+                ev_id, venue, ent_id = r
+                if ev_id not in fixtures_map:
+                    fixtures_map[ev_id] = {"venue": venue, "parts": []}
+                fixtures_map[ev_id]["parts"].append(ent_id)
+                
+            mc_fixtures = []
+            for ev_id, data in fixtures_map.items():
+                parts = data["parts"]
+                if len(parts) == 2:
+                    mc_fixtures.append({
+                        "home_id": parts[0],
+                        "away_id": parts[1],
+                        "win_prob": 0.45,
+                        "draw_prob": 0.28,
+                        "loss_prob": 0.27
+                    })
+                    
+            if not mc_fixtures:
+                mc_fixtures.append({
+                    "home_id": mc_standings[0]["entity_id"],
+                    "away_id": mc_standings[1]["entity_id"],
+                    "win_prob": 0.45,
+                    "draw_prob": 0.28,
+                    "loss_prob": 0.27
+                })
+                
+            engine_input = {
+                "model_name": "monte_carlo",
+                "n_simulations": request.n_simulations or 10000,
+                "seed": 42,
+                "standings": mc_standings,
+                "fixtures": mc_fixtures
+            }
+            
+            proc = subprocess.Popen(
+                [ENGINE_PATH, "--cli"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = proc.communicate(input=json.dumps(engine_input))
+            
+            if proc.returncode != 0:
+                raise RuntimeError(f"Engine process failed with code {proc.returncode}: {stderr}")
+                
+            res_json = json.loads(stdout)
+            distributions = res_json.get("rank_distributions", {})
+            
+            latency = (time.time() - start_time) * 1000.0
+            log_structured("SimulationService", "SimulateSeason", latency, "SUCCESS", {"league_id": request.league_id})
+            
+            for entity_id, probs in distributions.items():
+                frequencies = [int(p * (request.n_simulations or 10000)) for p in probs]
+                yield services_pb2.SeasonSimulationResult(
+                    entity_id=entity_id,
+                    rank_frequencies=frequencies
+                )
+                
+        except Exception as e:
+            latency = (time.time() - start_time) * 1000.0
+            log_structured("SimulationService", "SimulateSeason", latency, "ERROR", {"error": str(e)})
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            raise
+
+def serve():
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    services_pb2_grpc.add_RatingServiceServicer_to_server(RatingServiceImpl(), server)
+    services_pb2_grpc.add_PredictionServiceServicer_to_server(PredictionServiceImpl(), server)
+    services_pb2_grpc.add_SimulationServiceServicer_to_server(SimulationServiceImpl(), server)
+    
+    server.add_insecure_port('[::]:50051')
+    print("Starting gRPC Server on port 50051...", flush=True)
+    server.start()
+    try:
+        while True:
+            time.sleep(86400)
+    except KeyboardInterrupt:
+        server.stop(0)
+
+if __name__ == '__main__':
+    serve()
