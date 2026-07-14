@@ -281,3 +281,257 @@ select:focus {
   padding: 1rem 0;
   border-bottom: 1px solid var(--border-color);
 }
+
+/* ── Global Filters Bar ── */
+.global-filters {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ── Bar Legend ── */
+.bar-legend {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+/* ── Text Input ── */
+.text-input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+  min-width: 160px;
+}
+.text-input:focus {
+  border-color: var(--accent-color);
+}
+
+/* ── Loading placeholder ── */
+.loading-state {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 3rem 1rem;
+  font-style: italic;
+}
+
+/* ── Match Detail Overlay ── */
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.detail-panel {
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  width: min(520px, 95vw);
+  height: 100vh;
+  overflow-y: auto;
+  padding: 2rem;
+  position: relative;
+  animation: slideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+.detail-close {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, border-color 0.2s;
+}
+.detail-close:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+/* ── Scoreline Heatmap ── */
+.heatmap-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.heatmap-header-row {
+  display: flex;
+  gap: 2px;
+}
+.heatmap-axis-label {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  display: flex;
+  align-items: center;
+}
+.heatmap-col-label {
+  width: 44px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.heatmap-row {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.heatmap-row-label {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-weight: 700;
+  text-align: right;
+  padding-right: 8px;
+}
+.heatmap-cell {
+  width: 44px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: default;
+  transition: filter 0.15s;
+}
+.heatmap-cell:hover {
+  filter: brightness(1.3);
+}
+
+/* ── Model Inputs Grid ── */
+.model-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+.model-input-item {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.model-input-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+.model-input-value {
+  color: #a78bfa;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+/* ── Rating History tab ── */
+.accent-purple { color: #a78bfa; }
+
+/* ── Simulation tab ── */
+.simulation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-end;
+  margin-bottom: 1.5rem;
+}
+.simulation-controls .form-group {
+  margin-bottom: 0;
+}
+.btn-run {
+  background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+  color: white;
+  border: none;
+  padding: 0.65rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: box-shadow 0.2s;
+}
+.btn-run:hover { box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4); }
+.btn-run:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.whatif-section {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+}
+.whatif-form {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Accuracy / Calibration tab ── */
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.metric-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  text-align: center;
+}
+.metric-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+.metric-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* ── Responsive tweaks ── */
+@media (max-width: 700px) {
+  .tabs-container { flex-wrap: wrap; border-radius: 1rem; }
+  .tab-btn { padding: 0.6rem 1rem; font-size: 0.85rem; }
+  .metric-cards { grid-template-columns: 1fr; }
+  .model-inputs-grid { grid-template-columns: 1fr; }
+  .simulation-controls { flex-direction: column; align-items: stretch; }
+  .match-card { grid-template-columns: 1fr; text-align: center; }
+  .team-home, .team-away { justify-content: center; }
+}
+
