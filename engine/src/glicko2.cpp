@@ -62,7 +62,7 @@ GlickoParticipant calculate_glicko2_update(
         B = std::log(delta * delta - phi * phi - v);
     } else {
         double k = 1.0;
-        while (f_val(a - k * tau, delta, phi, v, a, tau) >= 0.0) {
+        while (f_val(a - k * tau, delta, phi, v, a, tau) <= 0.0 && k < 50.0) {
             k += 1.0;
         }
         B = a - k * tau;
@@ -71,7 +71,8 @@ GlickoParticipant calculate_glicko2_update(
     double f_A = f_val(A, delta, phi, v, a, tau);
     double f_B = f_val(B, delta, phi, v, a, tau);
 
-    while (std::abs(B - A) > 1e-6) {
+    int iter = 0;
+    while (std::abs(B - A) > 1e-6 && iter++ < 100) {
         double C = A + f_A * (A - B) / (f_B - f_A);
         double f_C = f_val(C, delta, phi, v, a, tau);
         if (f_C * f_B < 0.0) {
