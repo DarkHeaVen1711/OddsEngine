@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package oddsengine;
+
+option java_multiple_files = true;
+option java_package = "com.oddsengine.proto";
+
+message Entity {
+  string id = 1;
+  string name = 2;
+  string sport_id = 3;
+  string entity_type = 4;
+  string metadata_json = 5;
+}
+
+message Event {
+  string id = 1;
+  string sport_id = 2;
+  int64 timestamp = 3;
+  string venue = 4;
+  string status = 5;
+  string format = 6;
+  string metadata_json = 7;
+}
+
+message Participant {
+  string event_id = 1;
+  string entity_id = 2;
+  string result_data_json = 3;
+  int32 finish_rank = 4;
+}
+
+message RatingSnapshot {
+  string entity_id = 1;
+  string sport_id = 2;
+  string model_name = 3;
+  double rating = 4;
+  double rating_deviation = 5;
+  double volatility = 6;
+  int64 as_of_timestamp = 7;
+}
+
+message PredictionRecord {
+  string event_id = 1;
+  string model_name = 2;
+  string predicted_outcome_probs_json = 3;
+  string predicted_result_json = 4;
+  int64 generated_at = 5;
+  string actual_result_json = 6;
+}

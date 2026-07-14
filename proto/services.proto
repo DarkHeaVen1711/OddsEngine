@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package oddsengine;
+
+import "domain.proto";
+
+option java_multiple_files = true;
+option java_package = "com.oddsengine.proto";
+
+message EventResult {
+  Event event = 1;
+  repeated Participant participants = 2;
+}
+
+message RatingResponse {
+  repeated RatingSnapshot snapshots = 1;
+}
+
+message PredictRequest {
+  string sport_id = 1;
+  repeated string participant_entity_ids = 2;
+  int64 as_of_timestamp = 3;
+  string model_name = 4;
+}
+
+message SeasonRequest {
+  string league_id = 1;
+  int32 n_simulations = 2;
+}
+
+message SeasonSimulationResult {
+  string entity_id = 1;
+  repeated int32 rank_frequencies = 2;
+}
+
+service RatingService {
+  rpc UpdateRating(EventResult) returns (RatingResponse);
+}
+
+service PredictionService {
+  rpc PredictEvent(PredictRequest) returns (PredictionRecord);
+}
+
+service SimulationService {
+  rpc SimulateSeason(SeasonRequest) returns (stream SeasonSimulationResult);
+}
