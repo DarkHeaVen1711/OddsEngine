@@ -1,5 +1,6 @@
 #include "elo.hpp"
 #include "glicko2.hpp"
+#include "poisson.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -88,6 +89,20 @@ void run_tests() {
     assert(std::abs(glicko_result.rating - 1464.06) < 0.05);
     assert(std::abs(glicko_result.rd - 151.52) < 0.05);
     assert(std::abs(glicko_result.volatility - 0.05999) < 0.001);
+
+    // Test 5: Poisson Model Parameter Recovery
+    std::vector<MatchRecord> history = {
+        {"H", "A", 3, 0, 1.0},
+        {"H", "A", 2, 1, 1.0},
+        {"A", "H", 0, 2, 1.0},
+        {"H", "A", 4, 1, 1.0}
+    };
+    PoissonModel poisson;
+    poisson.fit(history, 100, 0.01);
+    double win = 0.0, draw = 0.0, loss = 0.0;
+    poisson.get_score_matrix("H", "A", win, draw, loss);
+    assert(win > loss);
+    assert(std::abs(win + draw + loss - 1.0) < 0.01);
 
     std::cout << "All statistical core tests passed successfully!" << std::endl;
 }
@@ -182,6 +197,74 @@ void run_cli() {
             first = false;
         }
         std::cout << "}}" << std::endl;
+
+    } else if (model_name == "poisson") {
+        std::vector<MatchRecord> history;
+        size_t pos = line.find("\"history\"");
+        if (pos != std::string::npos) {
+            size_t hist_end = line.find("]", pos);
+            while (true) {
+                pos = line.find("\"home_id\"", pos);
+                if (pos == std::string::npos || pos > hist_end) break;
+
+                pos = line.find("\"", pos + 9);
+                size_t h_end = line.find("\"", pos + 1);
+                std::string home_id = line.substr(pos + 1, h_end - pos - 1);
+                pos = h_end;
+
+                pos = line.find("\"away_id\"", pos);
+                pos = line.find("\"", pos + 9);
+                size_t a_end = line.find("\"", pos + 1);
+                std::string away_id = line.substr(pos + 1, a_end - pos - 1);
+                pos = a_end;
+
+                pos = line.find("\"home_goals\"", pos);
+                pos = line.find(":", pos);
+                size_t hg_end = line.find_first_of(",}", pos);
+                int home_goals = std::stoi(line.substr(pos + 1, hg_end - pos - 1));
+                pos = hg_end;
+
+                pos = line.find("\"away_goals\"", pos);
+                pos = line.find(":", pos);
+                size_t ag_end = line.find_first_of(",}", pos);
+                int away_goals = std::stoi(line.substr(pos + 1, ag_end - pos - 1));
+                pos = ag_end;
+
+                pos = line.find("\"weight\"", pos);
+                pos = line.find(":", pos);
+                size_t w_end = line.find_first_of(",}", pos);
+                double weight = std::stod(line.substr(pos + 1, w_end - pos - 1));
+                pos = w_end;
+
+                history.push_back({home_id, away_id, home_goals, away_goals, weight});
+            }
+        }
+
+        std::string pred_home = "H";
+        std::string pred_away = "A";
+        size_t pred_pos = line.find("\"predict_match\"");
+        if (pred_pos != std::string::npos) {
+            pred_pos = line.find("\"home_id\"", pred_pos);
+            pred_pos = line.find("\"", pred_pos + 9);
+            size_t h_end = line.find("\"", pred_pos + 1);
+            pred_home = line.substr(pred_pos + 1, h_end - pred_pos - 1);
+            pred_pos = h_end;
+
+            pred_pos = line.find("\"away_id\"", pred_pos);
+            pred_pos = line.find("\"", pred_pos + 9);
+            size_t a_end = line.find("\"", pred_pos + 1);
+            pred_away = line.substr(pred_pos + 1, a_end - pred_pos - 1);
+        }
+
+        PoissonModel poisson;
+        poisson.fit(history, 100, 0.005);
+
+        double win = 0.0, draw = 0.0, loss = 0.0;
+        poisson.get_score_matrix(pred_home, pred_away, win, draw, loss);
+
+        std::cout << "{\"probabilities\": {\"win\": " << win 
+                  << ", \"draw\": " << draw 
+                  << ", \"loss\": " << loss << "}}" << std::endl;
 
     } else {
         Event event;
