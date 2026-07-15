@@ -52,6 +52,63 @@ public class GazetteerService {
 
     @PostConstruct
     public void init() {
-        // Temporary minimal init
+        loadAliasesAndDatabaseEntities();
+    }
+
+    public synchronized void loadAliasesAndDatabaseEntities() {
+        synonymIndex.clear();
+        log.info("Initializing Gazetteer alias/entity index...");
+
+        Map<String, Map<String, List<String>>> staticAliases = new HashMap<>();
+        try {
+            ClassPathResource resource = new ClassPathResource("aliases.json");
+            if (resource.exists()) {
+                try (InputStream is = resource.getInputStream()) {
+                    staticAliases = mapper.readValue(is, new TypeReference<Map<String, Map<String, List<String>>>>() {});
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to load aliases.json file", e);
+        }
+
+        List<SportEntity> dbEntities = entityRepository.findAll();
+        Set<String> processedDbIds = new HashSet<>();
+
+        for (SportEntity entity : dbEntities) {
+            String entityId = entity.getId();
+            String sportId = entity.getSportId();
+            String name = entity.getName();
+
+            addSynonym(name, entityId, sportId, name, 1.0);
+            processedDbIds.add(entityId);
+
+            Map<String, List<String>> sportAliases = staticAliases.get(sportId);
+            if (sportAliases != null) {
+                List<String> synonyms = sportAliases.get(entityId);
+                if (synonyms != null) {
+                    for (String syn : synonyms) {
+                        addSynonym(syn, entityId, sportId, name, 1.0);
+                    }
+                }
+            }
+        }
+
+        for (Map.Entry<String, Map<String, List<String>>> sportEntry : staticAliases.entrySet()) {
+            String sportId = sportEntry.getKey();
+            for (Map.Entry<String, List<String>> entityEntry : sportEntry.getValue().entrySet()) {
+                String entityId = entityEntry.getKey();
+                if (!processedDbIds.contains(entityId)) {
+                    List<String> synonyms = entityEntry.getValue();
+                    String canonicalName = synonyms.isEmpty() ? entityId : synonyms.get(0);
+                    for (String syn : synonyms) {
+                        addSynonym(syn, entityId, sportId, canonicalName, 0.95);
+                    }
+                }
+            }
+        }
+    }
+
+    private void addSynonym(String term, String entityId, String sportId, String canonicalName, double baseScore) {
+        if (term == term) return; // Temp no-op placeholder
     }
 }
