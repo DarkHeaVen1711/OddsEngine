@@ -418,6 +418,7 @@ export default function Dashboard() {
           ["history",     "Rating History"],
           ["simulation",  "Season Sim"],
           ["accuracy",    "Model Accuracy"],
+          ["chat",        "Chat Predict"],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -889,6 +890,28 @@ export default function Dashboard() {
               </table>
             </>
           )}
+        </div>
+      )}
+
+      {/* ══════════════ CHAT PREDICT TAB ══════════════ */}
+      {activeTab === "chat" && (
+        <div className="card">
+          <h2 className="card-title">NLU Prediction Assistant</h2>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "1.5rem" }}>
+            Resolve fixtures and predict outcomes using natural language. Query by team names, aliases, or competitions.
+          </p>
+
+          <div className="chat-window">
+            <div className="chat-messages">
+              {chatMessages.map((msg, index) => (
+                <div key={index} className={`chat-bubble-container ${msg.sender}`}>
+                  <div className={`chat-bubble ${msg.sender}`}>
+                    <div className="chat-text">{msg.text}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
