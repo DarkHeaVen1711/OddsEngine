@@ -590,3 +590,70 @@ select:focus {
   border-bottom-left-radius: 0.25rem;
   border: 1px solid var(--border-color);
 }
+
+.chat-fixture-card {
+  margin-top: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.chat-fixture-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.sport-badge {
+  background: var(--border-color);
+  color: var(--text-primary);
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  font-weight: 700;
+}
+
+.format-badge {
+  background: var(--accent-color);
+  color: white;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  font-weight: 700;
+}
+
+.chat-fixture-venue {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.chat-fixture-date {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.chat-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.candidate-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 0.5rem 0.85rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.candidate-btn:hover {
+  border-color: var(--accent-color);
+  background: var(--bg-tertiary);
+}
