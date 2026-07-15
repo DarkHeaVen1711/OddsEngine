@@ -1,0 +1,32 @@
+{
+  "football": {
+    "man_city": ["Manchester City", "Man City", "City", "MCFC", "Citizens"],
+    "real_madrid": ["Real Madrid", "Madrid", "Los Blancos", "Real"],
+    "barcelona": ["Barcelona", "Barca", "FC Barcelona", "Blaugrana"],
+    "liverpool": ["Liverpool", "LFC", "Reds"],
+    "arsenal": ["Arsenal", "Gunners", "AFC"],
+    "bayern_munich": ["Bayern Munich", "Bayern", "FC Bayern", "Munich"],
+    "chelsea": ["Chelsea", "Blues", "CFC"],
+    "france": ["France", "French national team", "Les Bleus"],
+    "spain": ["Spain", "Spanish national team", "La Roja"],
+    "england": ["England", "Three Lions"],
+    "argentina": ["Argentina", "La Albiceleste"]
+  },
+  "cricket": {
+    "india": ["India", "Men in Blue", "Team India"],
+    "south_africa": ["South Africa", "Proteas", "SA"],
+    "australia": ["Australia", "Aussies"],
+    "england": ["England"],
+    "pakistan": ["Pakistan", "Green Shirts", "Shaheens"]
+  },
+  "f1": {
+    "max_verstappen": ["Max Verstappen", "Verstappen", "VER", "MV33"],
+    "perez": ["Sergio Perez", "Perez", "Checo", "PER"],
+    "hamilton": ["Lewis Hamilton", "Hamilton", "HAM"],
+    "leclerc": ["Charles Leclerc", "Leclerc", "LEC"],
+    "norris": ["Lando Norris", "Norris", "NOR"],
+    "red_bull": ["Red Bull Racing", "Red Bull", "RBR"],
+    "mercedes": ["Mercedes-AMG", "Mercedes", "MGP"],
+    "ferrari": ["Scuderia Ferrari", "Ferrari", "SF"]
+  }
+}

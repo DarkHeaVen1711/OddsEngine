@@ -169,6 +169,32 @@ export default function Dashboard() {
   const [accuracyModel,     setAccuracyModel]     = useState("elo");
   const [accuracyLoading,   setAccuracyLoading]   = useState(false);
 
+  // Chat NLU state
+  interface ChatMessage {
+    sender: "user" | "engine";
+    text: string;
+    success?: boolean;
+    resolvedFixture?: {
+      eventId: string;
+      sportId: string;
+      venue: string;
+      date: any;
+      format?: string;
+    };
+    probabilities?: { win: number; draw: number; loss: number };
+    candidates?: Array<{
+      eventId: string;
+      sportId: string;
+      venue: string;
+      date: any;
+    }>;
+  }
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { sender: "engine", text: "Welcome to OddsEngine assistant. Ask me to predict matches using natural language (e.g. 'predict Man City vs Real Madrid' or 'who wins France vs Spain')." }
+  ]);
+  const [chatLoading, setChatLoading] = useState(false);
+
   // ── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => { fetchLeaderboard(); fetchUpcoming(); }, [sportId, modelName]);
@@ -310,6 +336,47 @@ export default function Dashboard() {
     }, 1200);
   };
 
+  const handleSendChatMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || chatLoading) return;
+
+    const userText = chatInput;
+    setChatInput("");
+    setChatMessages(prev => [...prev, { sender: "user", text: userText }]);
+    setChatLoading(true);
+
+    try {
+      const res = await fetch(`${API}/api/chat/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: userText }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages(prev => [...prev, {
+          sender: "engine",
+          text: data.message,
+          success: data.success,
+          resolvedFixture: data.resolvedFixture,
+          probabilities: data.probabilities,
+          candidates: data.candidates,
+        }]);
+      } else {
+        setChatMessages(prev => [...prev, {
+          sender: "engine",
+          text: "Error calling chat prediction service.",
+        }]);
+      }
+    } catch {
+      setChatMessages(prev => [...prev, {
+        sender: "engine",
+        text: "Could not connect to the platform backend.",
+      }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   // Build stacked bar data for simulation
   const simChartData = simResults
     ? Object.entries(simResults).map(([team, probs]) => ({
@@ -351,6 +418,7 @@ export default function Dashboard() {
           ["history",     "Rating History"],
           ["simulation",  "Season Sim"],
           ["accuracy",    "Model Accuracy"],
+          ["chat",        "Chat Predict"],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -822,6 +890,109 @@ export default function Dashboard() {
               </table>
             </>
           )}
+        </div>
+      )}
+
+      {/* ══════════════ CHAT PREDICT TAB ══════════════ */}
+      {activeTab === "chat" && (
+        <div className="card">
+          <h2 className="card-title">NLU Prediction Assistant</h2>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "1.5rem" }}>
+            Resolve fixtures and predict outcomes using natural language. Query by team names, aliases, or competitions.
+          </p>
+
+          <div className="chat-window">
+            <div className="chat-messages">
+              {chatMessages.map((msg, index) => (
+                <div key={index} className={`chat-bubble-container ${msg.sender}`}>
+                  <div className={`chat-bubble ${msg.sender}`}>
+                    <div className="chat-text">{msg.text}</div>
+                    
+                    {/* Resolved Fixture details */}
+                    {msg.resolvedFixture && (
+                      <div className="chat-fixture-card">
+                        <div className="chat-fixture-header">
+                          <span className="sport-badge">{msg.resolvedFixture.sportId.toUpperCase()}</span>
+                          {msg.resolvedFixture.format && <span className="format-badge">{msg.resolvedFixture.format}</span>}
+                        </div>
+                        <div className="chat-fixture-venue">📍 {msg.resolvedFixture.venue}</div>
+                        <div className="chat-fixture-date">📅 {new Date(msg.resolvedFixture.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
+                      </div>
+                    )}
+
+                    {/* Probability distribution chart */}
+                    {msg.probabilities && (
+                      <div className="chat-probabilities">
+                        <div className="probability-bar" style={{ height: "1.5rem", marginTop: "0.5rem" }}>
+                          <div className="bar-win" style={{ width: `${(msg.probabilities.win || 0) * 100}%` }}>
+                            {((msg.probabilities.win || 0) * 100).toFixed(0)}%
+                          </div>
+                          {msg.probabilities.draw !== undefined && (
+                            <div className="bar-draw" style={{ width: `${(msg.probabilities.draw || 0) * 100}%` }}>
+                              {((msg.probabilities.draw || 0) * 100).toFixed(0)}%
+                            </div>
+                          )}
+                          <div className="bar-loss" style={{ width: `${(msg.probabilities.loss || 0) * 100}%` }}>
+                            {((msg.probabilities.loss || 0) * 100).toFixed(0)}%
+                          </div>
+                        </div>
+                        <div className="bar-legend" style={{ marginTop: "0.25rem", fontSize: "0.7rem" }}>
+                          <span style={{ color: "#10b981" }}>■ Win</span>
+                          {msg.probabilities.draw !== undefined && <span style={{ color: "#f59e0b" }}>■ Draw</span>}
+                          <span style={{ color: "#ef4444" }}>■ Loss</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Candidate disambiguation buttons */}
+                    {msg.candidates && msg.candidates.length > 0 && (
+                      <div className="chat-candidates">
+                        {msg.candidates.map((c, cIdx) => (
+                          <button
+                            key={cIdx}
+                            className="candidate-btn"
+                            onClick={() => {
+                              // Re-query using explicit event ID format or details
+                              setChatInput(`predict match ${c.eventId}`);
+                              // Auto trigger send
+                              setTimeout(() => {
+                                const btn = document.getElementById("chat-send-btn");
+                                if (btn) btn.click();
+                              }, 100);
+                            }}
+                          >
+                            {c.sportId.toUpperCase()} @ {c.venue} ({new Date(c.date).toLocaleDateString()})
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="chat-bubble-container engine">
+                  <div className="chat-bubble engine typing">
+                    <span>•</span><span>•</span><span>•</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSendChatMessage} className="chat-input-row">
+              <input
+                id="chat-input"
+                type="text"
+                placeholder="Ask me to predict a match... (e.g. 'predict man city against real madrid')"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                disabled={chatLoading}
+                className="chat-text-input"
+              />
+              <button id="chat-send-btn" type="submit" disabled={chatLoading} className="chat-send-btn">
+                Send
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>
