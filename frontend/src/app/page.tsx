@@ -169,6 +169,32 @@ export default function Dashboard() {
   const [accuracyModel,     setAccuracyModel]     = useState("elo");
   const [accuracyLoading,   setAccuracyLoading]   = useState(false);
 
+  // Chat NLU state
+  interface ChatMessage {
+    sender: "user" | "engine";
+    text: string;
+    success?: boolean;
+    resolvedFixture?: {
+      eventId: string;
+      sportId: string;
+      venue: string;
+      date: any;
+      format?: string;
+    };
+    probabilities?: { win: number; draw: number; loss: number };
+    candidates?: Array<{
+      eventId: string;
+      sportId: string;
+      venue: string;
+      date: any;
+    }>;
+  }
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { sender: "engine", text: "Welcome to OddsEngine assistant. Ask me to predict matches using natural language (e.g. 'predict Man City vs Real Madrid' or 'who wins France vs Spain')." }
+  ]);
+  const [chatLoading, setChatLoading] = useState(false);
+
   // ── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => { fetchLeaderboard(); fetchUpcoming(); }, [sportId, modelName]);
@@ -308,6 +334,47 @@ export default function Dashboard() {
       });
       setSimLoading(false);
     }, 1200);
+  };
+
+  const handleSendChatMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || chatLoading) return;
+
+    const userText = chatInput;
+    setChatInput("");
+    setChatMessages(prev => [...prev, { sender: "user", text: userText }]);
+    setChatLoading(true);
+
+    try {
+      const res = await fetch(`${API}/api/chat/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: userText }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages(prev => [...prev, {
+          sender: "engine",
+          text: data.message,
+          success: data.success,
+          resolvedFixture: data.resolvedFixture,
+          probabilities: data.probabilities,
+          candidates: data.candidates,
+        }]);
+      } else {
+        setChatMessages(prev => [...prev, {
+          sender: "engine",
+          text: "Error calling chat prediction service.",
+        }]);
+      }
+    } catch {
+      setChatMessages(prev => [...prev, {
+        sender: "engine",
+        text: "Could not connect to the platform backend.",
+      }]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   // Build stacked bar data for simulation
