@@ -109,6 +109,47 @@ public class GazetteerService {
     }
 
     private void addSynonym(String term, String entityId, String sportId, String canonicalName, double baseScore) {
-        if (term == term) return; // Temp no-op placeholder
+        if (term == null || term.trim().isEmpty()) return;
+        String normalized = term.trim().toLowerCase();
+        
+        List<EntityMatch> matches = synonymIndex.computeIfAbsent(normalized, k -> new ArrayList<>());
+        boolean exists = matches.stream().anyMatch(m -> m.getEntityId().equals(entityId) && m.getSportId().equals(sportId));
+        if (!exists) {
+            matches.add(new EntityMatch(entityId, sportId, canonicalName, term, baseScore));
+        }
+    }
+
+    public Optional<EntityMatch> resolve(String phrase) {
+        if (phrase == null || phrase.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        String query = phrase.trim().toLowerCase();
+
+        List<EntityMatch> exactMatches = synonymIndex.get(query);
+        if (exactMatches != null && !exactMatches.isEmpty()) {
+            return Optional.of(exactMatches.get(0));
+        }
+
+        EntityMatch bestMatch = null;
+        double bestScore = 0.0;
+
+        for (Map.Entry<String, List<EntityMatch>> entry : synonymIndex.entrySet()) {
+            String synonym = entry.getKey();
+            double score = jaroWinkler.apply(query, synonym);
+
+            if (score >= FUZZY_THRESHOLD && score > bestScore) {
+                bestScore = score;
+                EntityMatch matchTemplate = entry.getValue().get(0);
+                bestMatch = new EntityMatch(
+                    matchTemplate.getEntityId(),
+                    matchTemplate.getSportId(),
+                    matchTemplate.getCanonicalName(),
+                    phrase,
+                    bestScore
+                );
+            }
+        }
+
+        return Optional.ofNullable(bestMatch);
     }
 }
