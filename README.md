@@ -279,10 +279,15 @@ Data was weighted by recency (exponential decay: WC knockouts `0.97–0.99`, qua
 | **1.2** | Glicko-2 module (volatility, Illinois solver) | ✅ Complete |
 | **1.3** | Bivariate Poisson scoreline model | ✅ Complete |
 | **1.3b** | Plackett-Luce F1/N-way ranking model | ✅ Complete |
+| **1.3c** | Cricket format-aware model | 🚧 In Progress |
 | **1.4** | Bayesian updating layer | 🔜 Upcoming |
 | **1.5** | Monte Carlo season simulator | 🔜 Upcoming |
-| **1.6** | Model evaluation & backtesting utilities | 🔜 Upcoming |
+| **1.6** | Model evaluation & backtesting utilities | 🚧 In Progress |
 | **1.7** | gRPC service layer | 🔜 Upcoming |
+| **5a** | Chat: Fixture Resolution & Prediction | ✅ Complete |
+| **5b** | Chat: Conversational Analytics | 🔜 Upcoming |
+| **6** | Context-Aware Feature Layer | 🔜 Upcoming |
+| **7** | UI Redesign (hybrid chat/dashboard) | 🔜 Upcoming |
 
 ---
 
