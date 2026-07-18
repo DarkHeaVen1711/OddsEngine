@@ -222,9 +222,11 @@ void run_tests() {
 // Expects: {"model_name":"glicko2", "participants": [{"entity_id":"id","finish_rank":1,"current_rating":1500.0,"rating_deviation":350.0,"volatility":0.06}, ...]}
 void run_cli() {
     std::string line;
-    if (!std::getline(std::cin, line)) return;
+    while (std::getline(std::cin, line)) {
+        if (line.empty()) continue;
 
-    using namespace oddsengine;
+        using namespace oddsengine;
+
     
     std::string model_name = "elo";
     size_t model_pos = line.find("\"model_name\"");
@@ -722,6 +724,7 @@ void run_cli() {
         }
         std::cout << "}}" << std::endl;
     }
+}
 }
 
 int main(int argc, char* argv[]) {
