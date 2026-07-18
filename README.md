@@ -283,7 +283,7 @@ Data was weighted by recency (exponential decay: WC knockouts `0.97–0.99`, qua
 | **1.4** | Bayesian updating layer | 🔜 Upcoming |
 | **1.5** | Monte Carlo season simulator | 🔜 Upcoming |
 | **1.6** | Model evaluation & backtesting utilities | ✅ Complete |
-| **1.7** | gRPC service layer | 🔜 Upcoming |
+| **1.7** | gRPC service layer | ✅ Complete |
 | **5a** | Chat: Fixture Resolution & Prediction | ✅ Complete |
 | **5b** | Chat: Conversational Analytics | 🔜 Upcoming |
 | **6** | Context-Aware Feature Layer | 🔜 Upcoming |
