@@ -38,6 +38,11 @@ public class IngestionService {
     @Transactional
     public int ingestMatches(String sportId, Long since, String modelName) {
         List<EventWrapper> recentEvents = dataAdapter.fetchRecentMatches(sportId, since);
+        return ingestBatch(recentEvents, modelName);
+    }
+
+    @Transactional
+    public int ingestBatch(List<EventWrapper> recentEvents, String modelName) {
         int ingestedCount = 0;
 
         for (EventWrapper wrapper : recentEvents) {

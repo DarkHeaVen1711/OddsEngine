@@ -5,7 +5,7 @@ import os
 
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "db.sqlite3"))
 ENGINE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "engine", "engine.exe"))
-REPORT_PATH = r"C:\Users\Vyom\.gemini\antigravity-ide\brain\15ad8551-49d4-4f9a-ab7b-92ed2548c7b9\backtest_report.md"
+REPORT_PATH = r"C:\Users\Vyom\.gemini\antigravity-ide\brain\4cedbe79-42b4-4839-aec1-b2822290c69e\backtest_report.md"
 
 def main():
     conn = sqlite3.connect(DB_PATH)
