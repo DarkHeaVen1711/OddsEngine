@@ -196,6 +196,25 @@ void run_tests() {
     assert(backtest_res.n_predictions == 3);
     assert(backtest_res.brier_score > 0.0);
 
+    // Test 10: Cricket Format-Aware Model
+    std::map<std::string, double> cricket_ratings = {
+        {"IND", 1600.0},
+        {"AUS", 1550.0}
+    };
+    // T20 Match (IND home, AUS wins toss)
+    auto pred_t20 = predict_cricket_match("cricket_t20", "IND", "AUS", cricket_ratings, "AUS");
+    assert(pred_t20.p_home_win > 0.50); // IND should still be favored due to higher rating + home advantage
+    assert(pred_t20.p_draw == 0.0);     // No draws in T20
+    assert(std::abs(pred_t20.p_home_win + pred_t20.p_away_win - 1.0) < 1e-6);
+
+    // Test Match (IND home, IND wins toss)
+    auto pred_test = predict_cricket_match("cricket_test", "IND", "AUS", cricket_ratings, "IND");
+    assert(pred_test.p_draw > 0.0);     // Test matches have draws
+    // IND win prob is scaled down by draw prob, but their raw total logit should be higher
+    assert(pred_test.home_logit > pred_t20.home_logit); 
+    assert((pred_test.rating_diff + pred_test.toss_logit + pred_test.home_logit) > 
+           (pred_t20.rating_diff + pred_t20.toss_logit + pred_t20.home_logit));
+
     std::cout << "All statistical core tests passed successfully!" << std::endl;
 }
 
@@ -203,9 +222,11 @@ void run_tests() {
 // Expects: {"model_name":"glicko2", "participants": [{"entity_id":"id","finish_rank":1,"current_rating":1500.0,"rating_deviation":350.0,"volatility":0.06}, ...]}
 void run_cli() {
     std::string line;
-    if (!std::getline(std::cin, line)) return;
+    while (std::getline(std::cin, line)) {
+        if (line.empty()) continue;
 
-    using namespace oddsengine;
+        using namespace oddsengine;
+
     
     std::string model_name = "elo";
     size_t model_pos = line.find("\"model_name\"");
@@ -703,6 +724,7 @@ void run_cli() {
         }
         std::cout << "}}" << std::endl;
     }
+}
 }
 
 int main(int argc, char* argv[]) {
