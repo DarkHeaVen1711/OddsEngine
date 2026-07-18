@@ -208,8 +208,91 @@ Given the recommendation to ship baselines first, track each sport's model at an
 
 ---
 
+## PHASE 5 — Chat-Based Fixture Resolution (rule-based NLU, no external API calls)
+
+**Design principle**: this is an entity-resolution problem, not a free-text generation problem. The parser's only job is turning a sentence into structured slots; your existing engine still produces the actual prediction. Never let the parser or the resolver invent a probability — if it can't confidently resolve to one real `Event`, it asks a clarifying question instead of guessing.
+
+### 5.1 Entity & alias gazetteer
+- Build a gazetteer table: `entity_id → [canonical_name, aliases[]]` covering every entity across all three sports (e.g. "France" / "French national team" / "Les Bleus"; "Max Verstappen" / "Verstappen" / "VER")
+- Populate from your existing `Entity` records plus a manually-curated alias list per sport — this is small, finite, and worth doing by hand rather than trying to auto-generate
+- Use fuzzy string matching (Levenshtein/Jaro-Winkler — Java has libraries for both) against the gazetteer rather than exact string match, so casing, partial names, and minor typos still resolve
+
+### 5.2 Slot grammar (rule-based, not regex-only)
+- Define a small intent grammar with slots: `{sport (nullable, inferred if omitted), entities: [...], competition (nullable), round (nullable — "semi final", "quarter final", "final", "group stage"), date_hint (nullable — "today", "this weekend", explicit date)}`
+- Implement as a tokenizer + keyword/pattern matcher, not a single regex — split on connector words ("vs", "v", "against", "-"), extract entity spans via gazetteer lookup (5.1), extract competition/round via a small controlled vocabulary list (finite per sport — "world cup", "premier league", "grand prix", "test series", etc.)
+- Explicitly out of scope for rule-based parsing: compound/conditional queries ("predict France vs Spain, but if Mbappé is injured"). Detect these as unparseable and fall back to a clarifying prompt rather than guessing at partial matches.
+
+### 5.3 Fixture resolver
+- Given extracted slots, query `Event`/`Participant`: filter by the two (or N) resolved `entity_id`s, then narrow by `sport_id`, `competition`/`format`, and `round` metadata fields if present
+- **Ambiguity handling is the core design problem here, not an edge case.** If more than one `Event` matches (e.g. France and Spain have played twice this year), do not guess — return the candidates and ask the user to pick, or default to the most temporally relevant one (soonest upcoming, or most recent for a past-result query) only when the phrasing implies "the next/latest" match
+- If zero matches, check whether the *entities* resolved correctly but the *competition/round* filter is too narrow (common failure mode) — relax the round filter before giving up, and say explicitly which part failed ("found the entities, no scheduled World Cup semi-final between them yet") rather than a bare "not found"
+
+### 5.4 Response assembly
+- Once resolved to a single `Event`, call the existing `PredictionService`/engine pipeline exactly as any other prediction request would — the chat layer is a new front door onto the existing system, not a parallel prediction path
+- State which fixture it resolved to explicitly (venue, date, competition) before giving the prediction, so the user can catch a wrong resolution immediately rather than trusting a silently-wrong match
+
+### 5.5 Testing
+- Build a test set of ~30-50 phrasings per sport covering: full names, aliases, missing competition, missing round, ambiguous team pairs, misspellings, and out-of-scope compound queries — this is your regression suite for the NLU layer, and rule-based systems degrade silently without one
+
+---
+
+## PHASE 6 — Context-Aware Feature Layer (sport-conditional, tiered)
+
+**Design principle**: the four metric categories you specified map very unevenly across sports — there's no "possession %" in F1 and no "pitch conditions" concept that transfers cleanly from cricket to football. Build one general feature *schema* with per-sport applicability flags, not one universal feature set with nulls everywhere for two of three sports. And critically: **no new feature is used in a live prediction until it's cleared the Phase 4 backtest bar against the current baseline** — this phase adds candidate inputs, it does not bypass the validation gate already established for the sport-specific models.
+
+### 6.1 Feature schema & per-sport applicability map
+- Define one `ContextFeature` table: `entity_id, event_id (nullable — some features are entity-level, not match-level), feature_name, value, as_of_timestamp, sport_applicability[]`
+- Build an explicit mapping table of which of your four categories apply to which sport, so ingestion/modeling code never silently handles "N/A for this sport" — it just doesn't query features outside that sport's applicable set:
+
+| Category | Football | Cricket | F1 |
+|---|---|---|---|
+| Current form (W/L/D last 5-10) | ✅ | ✅ (per format) | ✅ (finishing positions) |
+| Scoring/conceding efficiency | ✅ goals | ✅ runs/wickets | ⚠️ reframe as avg. finishing position |
+| xG/xA equivalent | ✅ xG/xA | ⚠️ closest analogue: batting/bowling avg. vs. expected | ❌ not applicable |
+| Possession/dominance | ✅ | ❌ not applicable | ❌ not applicable |
+| Disciplinary record | ✅ cards/fouls | ⚠️ limited (over-rate, code of conduct) | ⚠️ limited (penalties, grid drops) |
+| Home/away advantage | ✅ | ✅ | ⚠️ reframe as "home Grand Prix" for driver |
+| H2H history | ✅ | ✅ | ✅ (driver-vs-driver at same circuit) |
+| Motivation/stakes | ✅ | ✅ | ✅ (championship implications) |
+| Rest/fatigue/scheduling | ✅ | ✅ (multi-format overlap) | ✅ (back-to-back races) |
+| Derby/rivalry factor | ✅ | ✅ | ⚠️ weaker signal, teammate rivalries exist |
+| Injuries/availability | ✅ | ✅ | ✅ (driver fitness, car damage carryover) |
+| Squad depth | ✅ | ✅ | ❌ not applicable (1 driver per seat) |
+| Individual matchups | ✅ | ✅ (batter vs. bowler historically) | ⚠️ limited |
+| Goalkeeper/bowler/pitcher form | ✅ GK | ✅ bowling economy | ❌ not applicable |
+| Weather | ✅ | ✅ (major factor — toss decisions) | ✅ (major factor — tyre strategy) |
+| Pitch/ground/track conditions | ✅ (turf type) | ✅ (pitch wear — big factor) | ✅ (track characteristics) |
+| Referee/umpire tendencies | ✅ | ✅ | ⚠️ stewards, less individually trackable |
+| Market sentiment/odds movement | ⚠️ off by default (see 6.3) | ⚠️ off by default | ⚠️ off by default |
+
+- This table is itself a deliverable worth including in a report — it shows deliberate scoping rather than a copy-pasted feature list
+
+### 6.2 Data sourcing tiers (be honest about what's actually gettable)
+- **Tier A (freely available, build first)**: current form, H2H, home/away splits, basic scoring/conceding stats, weather (public APIs like Open-Meteo), rest days (derivable from existing fixture data)
+- **Tier B (available with more scraping effort)**: xG/xA (understat-style sources for football; Cricsheet ball-by-ball data for cricket advanced stats), disciplinary records, squad depth/individual matchups
+- **Tier C (hardest to source reliably, lowest priority)**: injuries/availability (needs a live news feed, not a static dataset — the softest and hardest-to-verify input you have), referee/umpire tendencies (needs per-official historical stats, sparse and noisy), market sentiment (needs a live odds feed, likely a paid API — see 6.3 on whether you even want it)
+- Build Tier A first, wire it into the model, backtest it. Only add Tier B/C once Tier A has demonstrably moved the needle — same discipline as the sport-model tiering, applied to features instead of whole models
+
+### 6.3 Market sentiment — decide explicitly, don't default it in
+- If included: treat it as a distinct, clearly-labeled input to an ensemble step, not a silent addition to the Poisson/Elo parameters — the frontend and any report should be explicit that "market-blended" predictions are a different, more odds-anchored output than the pure statistical model's own number
+- Recommendation: build the plumbing (schema, ingestion hook) but leave it toggled off by default until you've decided whether an odds-blended mode is actually a feature you want to present as "OddsEngine's prediction," given it partially defeats the point of an independent model
+
+### 6.4 Model integration
+- Extend the Poisson λ parameters (and the Plackett-Luce θ parameters) from static per-entity constants into a function of entity strength *plus* a learned weight vector over applicable Tier A/B context features — a logistic/linear adjustment layered on top of the existing rating-based baseline, not a full replacement
+- This is a meaningful methodological upgrade (rating-only → rating-plus-context regression) worth describing precisely in any writeup, since it's a real modeling contribution, not just "added more columns to a table"
+- Backtest each feature addition individually against the Phase 4 harness before keeping it — some of these (especially Tier C) may not actually improve Brier score once checked, and that negative result is itself useful and worth recording
+
+### 6.5 Testing
+- Unit test the feature-weighted λ/θ computation against a synthetic case with known feature effects
+- Backtest comparison: baseline rating-only model vs. rating+Tier-A vs. rating+Tier-A+Tier-B, tracked separately, so you can show incremental value (or lack thereof) of each tier rather than one opaque "final" number
+
+---
+
 ## Open decisions to lock down before starting
 1. **Order of specialized-model work after 1.0 ships** — recommendation: football → cricket → F1, following the data-reliability ordering surfaced in the Phase 0.3 feasibility spike
 2. **Single global engine instance vs. per-sport engine instances** — affects how rating parameters (K-factor, home advantage, format-specific tracks) are configured
 3. **Multi-user or single-operator** — determines whether Phase 2.7 is needed at all
 4. **Scraper legality/stability** — confirm Jolpica-F1 and Cricsheet.org coverage meets your needs during 0.3, before building ingestion adapters (2.2) against a specific source's payload shape
+5. **gRPC vs. subprocess bridge** — the current CLI-over-stdin/stdout bridge works but doesn't scale and blocks the Monte Carlo streaming design; decide whether to actually wire up the existing `.proto` contracts or formally drop them from the architecture description
+6. **Market sentiment inclusion** — see 6.3; decide before building the ingestion hook, not after
+7. **Cricket model** — currently the biggest gap versus plan; prioritize 1.3c before adding more scope elsewhere
