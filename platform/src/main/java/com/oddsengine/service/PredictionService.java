@@ -8,6 +8,8 @@ import com.oddsengine.repository.ParticipantRepository;
 import com.oddsengine.repository.PredictionRecordRepository;
 import com.oddsengine.repository.SportEntityRepository;
 import com.oddsengine.repository.SportEventRepository;
+import com.oddsengine.repository.ContextFeatureRepository;
+import com.oddsengine.model.ContextFeature;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,18 +25,24 @@ public class PredictionService {
     private final ParticipantRepository participantRepository;
     private final SportEntityRepository entityRepository;
     private final PredictionRecordRepository predictionRepository;
+    private final ContextFeatureRepository featureRepository;
+    private final FeatureApplicabilityRegistry featureRegistry;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public PredictionService(EngineClient engineClient,
                              SportEventRepository eventRepository,
                              ParticipantRepository participantRepository,
                              SportEntityRepository entityRepository,
-                             PredictionRecordRepository predictionRepository) {
+                             PredictionRecordRepository predictionRepository,
+                             ContextFeatureRepository featureRepository,
+                             FeatureApplicabilityRegistry featureRegistry) {
         this.engineClient = engineClient;
         this.eventRepository = eventRepository;
         this.participantRepository = participantRepository;
         this.entityRepository = entityRepository;
         this.predictionRepository = predictionRepository;
+        this.featureRepository = featureRepository;
+        this.featureRegistry = featureRegistry;
     }
 
     @Transactional
@@ -85,7 +93,33 @@ public class PredictionService {
             }
         }
 
-        String probsJson = engineClient.predictEvent(modelName, history, home.getEntityId(), away.getEntityId());
+        List<Map<String, Object>> contextFeatures = new ArrayList<>();
+        // Fetch features for home
+        List<ContextFeature> homeFeatures = featureRepository.findByEntityId(home.getEntityId());
+        for (ContextFeature cf : homeFeatures) {
+            if (featureRegistry.isFeatureApplicable(event.getSportId(), cf.getFeatureName())) {
+                Map<String, Object> fmap = new HashMap<>();
+                fmap.put("entity_id", home.getEntityId());
+                fmap.put("feature_name", cf.getFeatureName());
+                fmap.put("value", cf.getValue());
+                contextFeatures.add(fmap);
+            }
+        }
+        // Fetch features for away
+        List<ContextFeature> awayFeatures = featureRepository.findByEntityId(away.getEntityId());
+        for (ContextFeature cf : awayFeatures) {
+            if (featureRegistry.isFeatureApplicable(event.getSportId(), cf.getFeatureName())) {
+                Map<String, Object> fmap = new HashMap<>();
+                fmap.put("entity_id", away.getEntityId());
+                fmap.put("feature_name", cf.getFeatureName());
+                fmap.put("value", cf.getValue());
+                contextFeatures.add(fmap);
+            }
+        }
+
+        boolean includeMarketSentiment = false; // toggle off by default as per 6.3
+
+        String probsJson = engineClient.predictEvent(modelName, history, home.getEntityId(), away.getEntityId(), contextFeatures, includeMarketSentiment);
 
         PredictionRecord record = new PredictionRecord();
         record.setEventId(matchId);

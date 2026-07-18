@@ -100,7 +100,7 @@ public class EngineClient {
         return results;
     }
 
-    public String predictEvent(String modelName, List<Map<String, Object>> history, String homeId, String awayId) {
+    public String predictEvent(String modelName, List<Map<String, Object>> history, String homeId, String awayId, List<Map<String, Object>> contextFeatures, boolean includeMarketSentiment) {
         try {
             String enginePath = findEngineExecutable();
             if (enginePath == null) {
@@ -114,6 +114,8 @@ public class EngineClient {
             predictMatch.put("home_id", homeId);
             predictMatch.put("away_id", awayId);
             inputMap.put("predict_match", predictMatch);
+            inputMap.put("context_features", contextFeatures);
+            inputMap.put("include_market_sentiment", includeMarketSentiment);
             
             String inputJson = objectMapper.writeValueAsString(inputMap);
 
