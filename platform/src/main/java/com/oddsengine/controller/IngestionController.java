@@ -61,6 +61,27 @@ public class IngestionController {
     }
 
     /**
+     * Ingest a batch of matches sent directly as a JSON payload.
+     * Useful for external data pipelines or direct API integrations.
+     *
+     * @param events    List of event wrapper JSON objects containing event, participants, and entities.
+     * @param modelName rating model to apply on ingested completed events (default "elo")
+     */
+    @PostMapping("/batch")
+    public Map<String, Object> ingestBatch(
+            @RequestBody java.util.List<com.oddsengine.service.EventWrapper> events,
+            @RequestParam(defaultValue = "elo") String modelName) {
+
+        int count = ingestionService.ingestBatch(events, modelName);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("modelName", modelName);
+        response.put("eventsReceived", events.size());
+        response.put("eventsIngested", count);
+        return response;
+    }
+
+    /**
      * Return current DB row counts — useful for verifying the pipeline has data.
      */
     @GetMapping("/status")
