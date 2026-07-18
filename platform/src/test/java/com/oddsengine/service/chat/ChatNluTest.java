@@ -149,4 +149,11 @@ public class ChatNluTest {
         assertFalse(parse.isParseable());
         assertTrue(parse.getRejectReason().contains("multiple sports"));
     }
+
+    @Test
+    public void testQueryWithNoTeams() {
+        SlotParser.ParseResult parse = slotParser.parse("predict semi final 2 for world cup");
+        assertFalse(parse.isParseable());
+        assertTrue(parse.getRejectReason().contains("Could not resolve any sports participants"));
+    }
 }

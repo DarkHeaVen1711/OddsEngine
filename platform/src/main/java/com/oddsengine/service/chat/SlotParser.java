@@ -88,6 +88,7 @@ public class SlotParser {
         for (Map.Entry<String, String> entry : COMPETITION_VOCAB.entrySet()) {
             if (normalized.contains(entry.getKey())) {
                 slot.setCompetition(entry.getValue());
+                normalized = normalized.replace(entry.getKey(), " ");
                 break;
             }
         }
@@ -96,6 +97,7 @@ public class SlotParser {
         for (Map.Entry<String, String> entry : ROUND_VOCAB.entrySet()) {
             if (normalized.contains(entry.getKey())) {
                 slot.setRound(entry.getValue());
+                normalized = normalized.replace(entry.getKey(), " ");
                 break;
             }
         }
@@ -104,6 +106,7 @@ public class SlotParser {
         for (Map.Entry<String, String> entry : SPORT_INDICATORS.entrySet()) {
             if (Pattern.compile("\\b" + entry.getKey() + "\\b").matcher(normalized).find()) {
                 slot.setSport(entry.getValue());
+                normalized = normalized.replaceAll("\\b" + entry.getKey() + "\\b", " ");
                 break;
             }
         }
