@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2
 
-SRCS = src/main.cpp src/elo.cpp src/glicko2.cpp src/poisson.cpp src/plackett_luce.cpp src/bayesian.cpp src/monte_carlo.cpp src/eval.cpp
+SRCS = src/main.cpp src/elo.cpp src/glicko2.cpp src/poisson.cpp src/plackett_luce.cpp src/bayesian.cpp src/monte_carlo.cpp src/eval.cpp src/cricket.cpp
 OBJS = $(SRCS:.cpp=.o)
 TARGET = engine.exe
 
