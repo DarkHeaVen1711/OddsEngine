@@ -228,6 +228,16 @@ echo '{
 |--------|----------|-------------|
 | `POST` | `/api/events/process` | Process an event and update ratings |
 | `GET` | `/api/ratings/{entityId}` | Fetch rating history for an entity |
+| `POST` | `/api/ingest/batch` | Ingest bulk JSON payloads of EventWrappers |
+
+### Example — Batch Ingestion (Phase 2.2 Live Adapters)
+You can ingest bulk match data from external providers (football-data.co.uk, Cricsheet, Jolpica F1) using the included Python adapters:
+```bash
+python scripts/fetch_football_api.py   # Premier League CSV -> JSON Ingestion
+python scripts/fetch_cricket_api.py    # Cricsheet match data
+python scripts/fetch_f1_api.py         # Jolpica F1 race results
+```
+This pushes JSON `EventWrapper` payloads to the Spring Boot backend, automatically deduplicating fixtures, mapping entities, and triggering the underlying statistical model updates.
 
 ### Example — Process a Football Match
 ```json
